@@ -1,50 +1,37 @@
-import { NextRequest, NextResponse } from "next/server";
-import {
-  ensureBootstrapAdmin,
-  getUserByEmail,
-  verifyPassword,
-  toPublic,
-} from "@/lib/auth";
-import { setSessionCookie, signSession } from "@/lib/session";
+import { NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
-  try {
-    // Seed first admin from ADMIN_EMAIL/ADMIN_PASSWORD env vars if missing
-    await ensureBootstrapAdmin();
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
+const REDIRECT_URI =
+  process.env.GOOGLE_REDIRECT_URI ||
+  "https://www.bookpulls.com/api/auth/callback/google";
 
-    const { email, password } = (await req.json()) as {
-      email?: string;
-      password?: string;
-    };
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: "Email and password required" },
-        { status: 400 }
-      );
-    }
+export async function GET() {
+  const state = crypto.randomUUID();
 
-    const user = await getUserByEmail(email);
-    if (!user) {
-      return NextResponse.json(
-        { error: "Invalid email or password" },
-        { status: 401 }
-      );
-    }
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: "code",
+    scope: "email profile",
+    state,
+    access_type: "online",
+    prompt: "select_account",
+  });
 
-    const ok = await verifyPassword(password, user.passwordHash);
-    if (!ok) {
-      return NextResponse.json(
-        { error: "Invalid email or password" },
-        { status: 401 }
-      );
-    }
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
-    const token = await signSession({ userId: user.id, role: user.role });
-    const res = NextResponse.json({ user: toPublic(user) });
-    setSessionCookie(res, token);
-    return res;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Login failed";
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
+  const res = NextResponse.redirect(url);
+
+  // Store state in a short-lived httpOnly cookie for CSRF protection
+  res.cookies.set({
+    name: "oauth_state",
+    value: state,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 600, // 10 minutes
+  });
+
+  return res;
 }

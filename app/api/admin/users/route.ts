@@ -4,7 +4,6 @@ import {
   deleteUser,
   listUsers,
   toPublic,
-  updateUserPassword,
   updateUserRole,
 } from "@/lib/auth";
 import { requireAdmin } from "@/lib/session";
@@ -31,20 +30,18 @@ export async function POST(req: NextRequest) {
   const { error } = await requireAdmin(req);
   if (error) return error;
   try {
-    const { email, password, role } = (await req.json()) as {
+    const { email, role } = (await req.json()) as {
       email?: string;
-      password?: string;
       role?: "admin" | "user";
     };
-    if (!email || !password) {
+    if (!email) {
       return NextResponse.json(
-        { error: "Email and password required" },
+        { error: "Email required" },
         { status: 400 }
       );
     }
     const user = await createUser({
       email,
-      password,
       role: role === "admin" ? "admin" : "user",
     });
     return NextResponse.json({ user: toPublic(user) });
@@ -76,16 +73,14 @@ export async function PATCH(req: NextRequest) {
   const { error } = await requireAdmin(req);
   if (error) return error;
   try {
-    const { id, password, role, allowedAccountIds } = (await req.json()) as {
+    const { id, role, allowedAccountIds } = (await req.json()) as {
       id?: string;
-      password?: string;
       role?: "admin" | "user";
       allowedAccountIds?: number[];
     };
     if (!id) {
       return NextResponse.json({ error: "id required" }, { status: 400 });
     }
-    if (password) await updateUserPassword(id, password);
     if (role === "admin" || role === "user") await updateUserRole(id, role);
     if (Array.isArray(allowedAccountIds)) {
       const current = await getAppSettings(id);

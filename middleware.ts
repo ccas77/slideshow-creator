@@ -6,6 +6,7 @@ const PUBLIC_PATHS = ["/login"];
 const PUBLIC_API_PREFIXES = [
   "/api/auth/login",
   "/api/auth/logout",
+  "/api/auth/callback",
   "/api/auth/me",
   "/api/cron", // guarded separately by CRON_SECRET
   "/api/post-results", // guarded separately by CRON_SECRET

@@ -1,15 +1,13 @@
-import bcrypt from "bcryptjs";
 import { redis } from "./kv";
 
 export interface User {
   id: string;
   email: string;
-  passwordHash: string;
   role: "admin" | "user";
   createdAt: string;
 }
 
-export type PublicUser = Omit<User, "passwordHash">;
+export type PublicUser = User;
 
 const USERS_ALL_KEY = "users:all";
 const userKey = (id: string) => `users:${id}`;
@@ -22,21 +20,8 @@ function uid() {
   );
 }
 
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
-}
-
-export async function verifyPassword(
-  password: string,
-  hash: string
-): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
-
 export function toPublic(user: User): PublicUser {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { passwordHash, ...rest } = user;
-  return rest;
+  return user;
 }
 
 export async function getUser(id: string): Promise<User | null> {
@@ -58,12 +43,11 @@ export async function listUsers(): Promise<User[]> {
 
 export async function createUser(input: {
   email: string;
-  password: string;
   role: "admin" | "user";
 }): Promise<User> {
   const email = input.email.trim().toLowerCase();
-  if (!email || !input.password) {
-    throw new Error("Email and password required");
+  if (!email) {
+    throw new Error("Email required");
   }
   const existing = await getUserByEmail(email);
   if (existing) throw new Error("User with this email already exists");
@@ -71,7 +55,6 @@ export async function createUser(input: {
   const user: User = {
     id: uid(),
     email,
-    passwordHash: await hashPassword(input.password),
     role: input.role,
     createdAt: new Date().toISOString(),
   };
@@ -90,16 +73,6 @@ export async function deleteUser(id: string): Promise<void> {
   await redis.srem(USERS_ALL_KEY, id);
 }
 
-export async function updateUserPassword(
-  id: string,
-  newPassword: string
-): Promise<void> {
-  const user = await getUser(id);
-  if (!user) throw new Error("User not found");
-  user.passwordHash = await hashPassword(newPassword);
-  await redis.set(userKey(id), user);
-}
-
 export async function updateUserRole(
   id: string,
   role: "admin" | "user"
@@ -111,15 +84,14 @@ export async function updateUserRole(
 }
 
 /**
- * Ensures an admin user exists. Called on first login attempt; uses
- * ADMIN_EMAIL + ADMIN_PASSWORD env vars to seed the first account.
+ * Ensures an admin user exists for the ADMIN_EMAIL env var.
+ * Called during OAuth callback; creates the admin account if it doesn't exist.
  * Safe to call repeatedly.
  */
 export async function ensureBootstrapAdmin(): Promise<void> {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const password = process.env.ADMIN_PASSWORD;
-  if (!email || !password) return;
+  if (!email) return;
   const existing = await getUserByEmail(email);
   if (existing) return;
-  await createUser({ email, password, role: "admin" });
+  await createUser({ email, role: "admin" });
 }

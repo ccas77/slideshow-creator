@@ -22,7 +22,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "user">("user");
   const [busy, setBusy] = useState(false);
 
@@ -62,7 +61,7 @@ export default function AdminPage() {
 
   async function addUser(e: React.FormEvent) {
     e.preventDefault();
-    if (!newEmail || !newPassword) return;
+    if (!newEmail) return;
     setBusy(true);
     setError(null);
     try {
@@ -71,14 +70,12 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: newEmail,
-          password: newPassword,
           role: newRole,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
       setNewEmail("");
-      setNewPassword("");
       setNewRole("user");
       await load();
     } catch (err) {
@@ -100,27 +97,6 @@ export default function AdminPage() {
         throw new Error(data.error || "Failed");
       }
       await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function resetPassword(id: string, email: string) {
-    const pw = prompt(`New password for ${email}:`);
-    if (!pw) return;
-    setBusy(true);
-    try {
-      const res = await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, password: pw }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed");
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -198,22 +174,14 @@ export default function AdminPage() {
         <h1 className="text-2xl font-bold mb-6">Admin · Users</h1>
 
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Add user</h2>
-          <form onSubmit={addUser} className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <h2 className="text-lg font-semibold mb-4">Invite user</h2>
+          <form onSubmit={addUser} className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input
               type="email"
               placeholder="email"
               required
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="password"
-              required
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
               className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm"
             />
             <select
@@ -229,11 +197,11 @@ export default function AdminPage() {
               disabled={busy}
               className="bg-white text-zinc-900 rounded-lg text-sm font-medium disabled:opacity-50"
             >
-              Add
+              Invite
             </button>
           </form>
           <p className="text-[11px] text-zinc-600 mt-3">
-            New users have no TikTok account access until you grant it below.
+            Invited users can sign in with Google. They have no TikTok account access until you grant it below.
           </p>
         </section>
 
@@ -241,7 +209,7 @@ export default function AdminPage() {
 
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl">
           {loading ? (
-            <div className="p-5 text-zinc-500 text-sm">Loading…</div>
+            <div className="p-5 text-zinc-500 text-sm">Loading...</div>
           ) : users.length === 0 ? (
             <div className="p-5 text-zinc-500 text-sm">No users yet.</div>
           ) : (
@@ -287,13 +255,6 @@ export default function AdminPage() {
                           {u.role === "admin" ? "Demote" : "Promote"}
                         </button>
                         <button
-                          onClick={() => resetPassword(u.id, u.email)}
-                          disabled={busy}
-                          className="text-xs text-zinc-400 hover:text-white px-2 py-1 disabled:opacity-50"
-                        >
-                          Reset pw
-                        </button>
-                        <button
                           onClick={() => deleteUser(u.id, u.email)}
                           disabled={busy}
                           className="text-xs text-red-400 hover:text-red-300 px-2 py-1 disabled:opacity-50"
@@ -309,7 +270,7 @@ export default function AdminPage() {
           )}
         </section>
 
-        {/* ═══ ACCOUNT ACCESS MODAL ═══ */}
+        {/* ACCOUNT ACCESS MODAL */}
         {editAccessId && editingUser && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -370,7 +331,7 @@ export default function AdminPage() {
                 disabled={savingAccess}
                 className="w-full rounded-lg bg-white text-black py-2 text-sm font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50"
               >
-                {savingAccess ? "Saving…" : "Save access"}
+                {savingAccess ? "Saving..." : "Save access"}
               </button>
             </div>
           </div>
