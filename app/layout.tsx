@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Slideshow Generator",
-  description: "AI-powered TikTok slideshow generator",
+  title: "BookPulls",
+  description: "AI-powered TikTok slideshow creator",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
