@@ -73,7 +73,7 @@ export default function PostsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-white">
+    <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="mx-auto w-full max-w-4xl px-6 sm:px-10 py-10">
         <AppHeader />
 
@@ -81,7 +81,7 @@ export default function PostsPage() {
           <h1 className="text-2xl font-bold">Posts</h1>
           <button
             onClick={load}
-            className="text-sm text-zinc-500 hover:text-white transition-colors"
+            className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
           >
             {loading ? "Loading…" : "Refresh"}
           </button>
@@ -95,7 +95,7 @@ export default function PostsPage() {
                 e.target.value === "all" ? "all" : Number(e.target.value)
               )
             }
-            className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           >
             <option value="all">All accounts</option>
             {accounts.map((a) => (
@@ -109,7 +109,7 @@ export default function PostsPage() {
             onChange={(e) =>
               setFilterStatus(e.target.value as "all" | "scheduled" | "posted")
             }
-            className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           >
             <option value="all">All statuses</option>
             <option value="scheduled">Scheduled</option>
@@ -118,7 +118,7 @@ export default function PostsPage() {
         </div>
 
         {filtered.length === 0 ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-10 text-center text-zinc-500">
+          <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-10 text-center text-gray-500">
             No posts match your filters.
           </div>
         ) : (
@@ -128,7 +128,7 @@ export default function PostsPage() {
               return (
                 <li
                   key={p.id}
-                  className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
+                  className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -136,29 +136,29 @@ export default function PostsPage() {
                         <span
                           className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
                             isScheduled
-                              ? "bg-blue-500/20 text-blue-300"
+                              ? "bg-blue-50 text-blue-600"
                               : p.status === "posted"
-                              ? "bg-green-500/20 text-green-300"
-                              : "bg-zinc-700 text-zinc-300"
+                              ? "bg-green-50 text-green-600"
+                              : "bg-gray-100 text-gray-600"
                           }`}
                         >
                           {p.status}
                         </span>
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs text-gray-500">
                           {p.slide_count} slides
                         </span>
                         {p.scheduled_at && (
-                          <span className="text-xs text-zinc-500">
+                          <span className="text-xs text-gray-500">
                             {new Date(p.scheduled_at).toLocaleString()}
                           </span>
                         )}
-                        <span className="text-xs text-zinc-400">
+                        <span className="text-xs text-gray-400">
                           {p.social_accounts
                             .map((id) => `@${accountUsername(id)}`)
                             .join(", ")}
                         </span>
                       </div>
-                      <p className="text-sm text-zinc-300 line-clamp-3 whitespace-pre-wrap">
+                      <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap">
                         {p.caption || "(no caption)"}
                       </p>
                       {p.videoUrl && (
@@ -166,7 +166,7 @@ export default function PostsPage() {
                           href={p.videoUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-block mt-2 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                          className="inline-block mt-2 text-xs text-blue-500 hover:text-blue-600 transition-colors"
                         >
                           View profile on TikTok &rarr;
                         </a>
@@ -175,7 +175,7 @@ export default function PostsPage() {
                     {isScheduled && (
                       <button
                         onClick={() => cancelPost(p.id)}
-                        className="text-xs text-red-400 hover:text-red-300 transition-colors shrink-0"
+                        className="text-xs text-red-500 hover:text-red-600 transition-colors shrink-0"
                       >
                         Cancel
                       </button>

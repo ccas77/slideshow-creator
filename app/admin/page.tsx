@@ -167,14 +167,14 @@ export default function AdminPage() {
   const editingUser = users.find((u) => u.id === editAccessId);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
+    <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="max-w-4xl mx-auto px-6 py-8">
         <AppHeader />
 
         <h1 className="text-2xl font-bold mb-6">Admin · Users</h1>
 
-        <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Invite user</h2>
+        <section className="bg-white border border-gray-200/60 rounded-2xl shadow-sm p-5 mb-6">
+          <h2 className="text-lg font-semibold mb-4 text-gray-900">Invite user</h2>
           <form onSubmit={addUser} className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input
               type="email"
@@ -182,12 +182,12 @@ export default function AdminPage() {
               required
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm"
+              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 placeholder-gray-400"
             />
             <select
               value={newRole}
               onChange={(e) => setNewRole(e.target.value as "admin" | "user")}
-              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm"
+              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
             >
               <option value="user">user</option>
               <option value="admin">admin</option>
@@ -195,25 +195,25 @@ export default function AdminPage() {
             <button
               type="submit"
               disabled={busy}
-              className="bg-white text-zinc-900 rounded-lg text-sm font-medium disabled:opacity-50"
+              className="bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-sm font-medium shadow-sm disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5"
             >
               Invite
             </button>
           </form>
-          <p className="text-[11px] text-zinc-600 mt-3">
+          <p className="text-[11px] text-gray-400 mt-3">
             Invited users can sign in with Google. They have no TikTok account access until you grant it below.
           </p>
         </section>
 
-        {error && <div className="text-sm text-red-400 mb-4">{error}</div>}
+        {error && <div className="text-sm text-red-500 mb-4">{error}</div>}
 
-        <section className="bg-zinc-900 border border-zinc-800 rounded-xl">
+        <section className="bg-white border border-gray-200/60 rounded-2xl shadow-sm">
           {loading ? (
-            <div className="p-5 text-zinc-500 text-sm">Loading...</div>
+            <div className="p-5 text-gray-500 text-sm">Loading...</div>
           ) : users.length === 0 ? (
-            <div className="p-5 text-zinc-500 text-sm">No users yet.</div>
+            <div className="p-5 text-gray-500 text-sm">No users yet.</div>
           ) : (
-            <ul className="divide-y divide-zinc-800">
+            <ul className="divide-y divide-gray-200/60">
               {users.map((u) => {
                 const allowedUsernames = u.allowedAccountIds
                   .map((id) => accounts.find((a) => a.id === id)?.username)
@@ -222,14 +222,14 @@ export default function AdminPage() {
                   <li key={u.id} className="px-5 py-3">
                     <div className="flex items-center gap-3 flex-wrap">
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm text-white truncate">{u.email}</div>
-                        <div className="text-xs text-zinc-500">
+                        <div className="text-sm text-gray-900 truncate">{u.email}</div>
+                        <div className="text-xs text-gray-500">
                           {u.role} · created {new Date(u.createdAt).toLocaleDateString()}
                         </div>
-                        <div className="text-xs text-zinc-400 mt-1">
+                        <div className="text-xs text-gray-400 mt-1">
                           Accounts:{" "}
                           {u.allowedAccountIds.length === 0 ? (
-                            <span className="text-red-400">none</span>
+                            <span className="text-red-500">none</span>
                           ) : (
                             <span>
                               {allowedUsernames.length > 0
@@ -243,21 +243,21 @@ export default function AdminPage() {
                         <button
                           onClick={() => openAccess(u)}
                           disabled={busy}
-                          className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1 rounded disabled:opacity-50"
+                          className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1 rounded-lg disabled:opacity-40 shadow-sm"
                         >
                           Accounts
                         </button>
                         <button
                           onClick={() => toggleRole(u)}
                           disabled={busy}
-                          className="text-xs text-zinc-400 hover:text-white px-2 py-1 disabled:opacity-50"
+                          className="text-xs text-gray-500 hover:text-gray-900 px-2 py-1 disabled:opacity-40"
                         >
                           {u.role === "admin" ? "Demote" : "Promote"}
                         </button>
                         <button
                           onClick={() => deleteUser(u.id, u.email)}
                           disabled={busy}
-                          className="text-xs text-red-400 hover:text-red-300 px-2 py-1 disabled:opacity-50"
+                          className="text-xs text-red-500 hover:text-red-600 px-2 py-1 disabled:opacity-40"
                         >
                           Delete
                         </button>
@@ -273,29 +273,29 @@ export default function AdminPage() {
         {/* ACCOUNT ACCESS MODAL */}
         {editAccessId && editingUser && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) setEditAccessId(null);
             }}
           >
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold">
+                <h2 className="text-lg font-bold text-gray-900">
                   Account access · {editingUser.email}
                 </h2>
                 <button
                   onClick={() => setEditAccessId(null)}
-                  className="text-zinc-500 hover:text-white text-xl"
+                  className="text-gray-400 hover:text-gray-900 text-xl"
                 >
                   &times;
                 </button>
               </div>
-              <p className="text-sm text-zinc-400 mb-4">
+              <p className="text-sm text-gray-500 mb-4">
                 Check every TikTok account this user is allowed to post to.
                 Unchecked accounts are hidden from them entirely.
               </p>
               {accounts.length === 0 ? (
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-gray-500">
                   No TikTok accounts returned by PostBridge.
                 </p>
               ) : (
@@ -305,20 +305,20 @@ export default function AdminPage() {
                     return (
                       <label
                         key={a.id}
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
                           checked
-                            ? "border-blue-500/50 bg-blue-500/10"
-                            : "border-zinc-800 bg-zinc-900/30"
+                            ? "border-blue-500/50 bg-blue-50"
+                            : "border-gray-200 bg-gray-50"
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleAccess(a.id)}
-                          className="rounded"
+                          className="accent-blue-500 rounded"
                         />
-                        <span className="text-sm">@{a.username}</span>
-                        <span className="text-[10px] text-zinc-600 ml-auto">
+                        <span className="text-sm text-gray-900">@{a.username}</span>
+                        <span className="text-[10px] text-gray-400 ml-auto">
                           ID: {a.id}
                         </span>
                       </label>
@@ -329,7 +329,7 @@ export default function AdminPage() {
               <button
                 onClick={saveAccess}
                 disabled={savingAccess}
-                className="w-full rounded-lg bg-white text-black py-2 text-sm font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50"
+                className="w-full rounded-xl bg-blue-500 text-white py-2.5 text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-40 shadow-sm"
               >
                 {savingAccess ? "Saving..." : "Save access"}
               </button>

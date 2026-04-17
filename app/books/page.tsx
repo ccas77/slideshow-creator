@@ -119,17 +119,17 @@ export default function BooksPage() {
   const activeBook = books.find((b) => b.id === activeBookId);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-white">
+    <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="mx-auto w-full max-w-5xl px-6 sm:px-10 py-10">
         <AppHeader />
 
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Books</h1>
           <div className="flex items-center gap-4">
-            {saving && <span className="text-xs text-zinc-500">Saving…</span>}
+            {saving && <span className="text-xs text-gray-500">Saving…</span>}
             <button
               onClick={createBook}
-              className="px-4 py-2 rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 transition-colors text-sm"
+              className="px-4 py-2 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 transition-colors text-sm shadow-sm"
             >
               + New book
             </button>
@@ -137,13 +137,13 @@ export default function BooksPage() {
         </div>
 
         {loading ? (
-          <p className="text-zinc-500">Loading…</p>
+          <p className="text-gray-500">Loading…</p>
         ) : books.length === 0 ? (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-10 text-center">
-            <p className="text-zinc-400 mb-4">No books yet.</p>
+          <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-10 text-center">
+            <p className="text-gray-400 mb-4">No books yet.</p>
             <button
               onClick={createBook}
-              className="px-5 py-2 rounded-lg bg-white text-black font-semibold text-sm"
+              className="px-5 py-2 rounded-xl bg-blue-500 text-white font-semibold text-sm shadow-sm"
             >
               Create your first book
             </button>
@@ -157,20 +157,20 @@ export default function BooksPage() {
                 value={bookSearch}
                 onChange={(e) => setBookSearch(e.target.value)}
                 placeholder="Search books..."
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm mb-1 focus:outline-none focus:ring-2 focus:ring-white/20 placeholder:text-zinc-600"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-1 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 placeholder:text-gray-400"
               />
               {books.filter((b) => b.name.toLowerCase().includes(bookSearch.toLowerCase())).map((b) => (
                 <button
                   key={b.id}
                   onClick={() => setActiveBookId(b.id)}
-                  className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
+                  className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${
                     activeBookId === b.id
-                      ? "border-white bg-zinc-900 text-white"
-                      : "border-zinc-800 bg-zinc-900/40 text-zinc-300 hover:border-zinc-700"
+                      ? "border-blue-500 bg-white text-gray-900 shadow-sm"
+                      : "border-gray-200/60 bg-white text-gray-700 hover:border-gray-300"
                   }`}
                 >
                   <div className="font-medium text-sm truncate">{b.name}</div>
-                  <div className="text-xs text-zinc-500 mt-0.5">
+                  <div className="text-xs text-gray-500 mt-0.5">
                     {b.slideshows.length} slideshow
                     {b.slideshows.length === 1 ? "" : "s"} ·{" "}
                     {b.imagePrompts.length} prompts · {b.captions.length}{" "}
@@ -181,29 +181,29 @@ export default function BooksPage() {
             </aside>
 
             {/* Main panel */}
-            <main className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+            <main className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
               {!activeBook ? (
-                <p className="text-zinc-500 text-sm">
+                <p className="text-gray-500 text-sm">
                   Select a book to manage its contents.
                 </p>
               ) : (
                 <>
                   <div className="flex items-center justify-between mb-5">
                     <div>
-                      <h2 className="text-xl font-semibold">
+                      <h2 className="text-xl font-semibold text-gray-900">
                         {activeBook.name}
                       </h2>
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => renameBook(activeBook.id)}
-                        className="text-xs text-zinc-500 hover:text-white transition-colors"
+                        className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
                       >
                         Rename
                       </button>
                       <button
                         onClick={() => deleteBook(activeBook.id)}
-                        className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                        className="text-xs text-red-500 hover:text-red-600 transition-colors"
                       >
                         Delete book
                       </button>
@@ -211,7 +211,7 @@ export default function BooksPage() {
                   </div>
 
                   {/* Tabs */}
-                  <div className="flex gap-1 mb-5 border-b border-zinc-800">
+                  <div className="flex gap-1 mb-5 border-b border-gray-200">
                     {(
                       [
                         ["slideshows", "Slideshows"],
@@ -224,8 +224,8 @@ export default function BooksPage() {
                         onClick={() => setTab(key)}
                         className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
                           tab === key
-                            ? "border-white text-white"
-                            : "border-transparent text-zinc-500 hover:text-white"
+                            ? "border-blue-500 text-blue-500"
+                            : "border-transparent text-gray-500 hover:text-gray-900"
                         }`}
                       >
                         {label}
@@ -298,14 +298,14 @@ export default function BooksPage() {
                         {activeBook.slideshows.map((s) => (
                           <div
                             key={s.id}
-                            className="rounded-xl border border-zinc-800 bg-zinc-950 p-4"
+                            className="rounded-xl border border-gray-200/60 bg-gray-50 p-4"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 min-w-0">
-                                <div className="font-medium text-sm mb-1">
+                                <div className="font-medium text-sm mb-1 text-gray-900">
                                   {s.name || "(unnamed)"}
                                 </div>
-                                <p className="text-xs text-zinc-600">
+                                <p className="text-xs text-gray-400">
                                   {
                                     s.slideTexts
                                       .split("\n")
@@ -318,7 +318,7 @@ export default function BooksPage() {
                               <div className="flex gap-2 shrink-0">
                                 <button
                                   onClick={() => setEditingSlideshow(s)}
-                                  className="text-xs text-zinc-400 hover:text-white transition-colors"
+                                  className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
                                 >
                                   Edit
                                 </button>
@@ -333,7 +333,7 @@ export default function BooksPage() {
                                       ),
                                     }));
                                   }}
-                                  className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                                  className="text-xs text-red-500 hover:text-red-600 transition-colors"
                                 >
                                   Delete
                                 </button>
@@ -353,7 +353,7 @@ export default function BooksPage() {
                               captionIds: [],
                             })
                           }
-                          className="flex-1 px-5 py-3 rounded-lg border border-dashed border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors text-sm font-medium"
+                          className="flex-1 px-5 py-3 rounded-xl border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors text-sm font-medium"
                         >
                           + Add slideshow
                         </button>
@@ -363,7 +363,7 @@ export default function BooksPage() {
                             setImportText("");
                             setShowImport(true);
                           }}
-                          className="flex-1 px-5 py-3 rounded-lg border border-dashed border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors text-sm font-medium"
+                          className="flex-1 px-5 py-3 rounded-xl border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors text-sm font-medium"
                         >
                           Import slide texts
                         </button>
@@ -380,7 +380,7 @@ export default function BooksPage() {
       {/* Item editor (image prompt or caption) */}
       {editingItem && activeBook && (
         <Modal onClose={() => setEditingItem(null)}>
-          <h3 className="text-lg font-semibold mb-4">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">
             {activeBook[
               editingItem.kind === "prompts" ? "imagePrompts" : "captions"
             ].some((x) => x.id === editingItem.item.id)
@@ -388,7 +388,7 @@ export default function BooksPage() {
               : "New"}{" "}
             {editingItem.kind === "prompts" ? "image prompt" : "caption"}
           </h3>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
             Name
           </label>
           <input
@@ -400,9 +400,9 @@ export default function BooksPage() {
               })
             }
             placeholder="Short label"
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           />
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
             {editingItem.kind === "prompts" ? "Image prompt" : "Caption"}
           </label>
           <textarea
@@ -414,7 +414,7 @@ export default function BooksPage() {
               })
             }
             rows={editingItem.kind === "prompts" ? 4 : 5}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           />
           <ModalButtons
             onCancel={() => setEditingItem(null)}
@@ -446,12 +446,12 @@ export default function BooksPage() {
       {/* Slideshow editor */}
       {editingSlideshow && activeBook && (
         <Modal onClose={() => setEditingSlideshow(null)}>
-          <h3 className="text-lg font-semibold mb-4">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">
             {activeBook.slideshows.some((s) => s.id === editingSlideshow.id)
               ? "Edit slideshow"
               : "New slideshow"}
           </h3>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
             Name
           </label>
           <input
@@ -460,9 +460,9 @@ export default function BooksPage() {
               setEditingSlideshow({ ...editingSlideshow, name: e.target.value })
             }
             placeholder="e.g. Chapter 1 teaser"
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           />
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
             Slide texts (one per line)
           </label>
           <textarea
@@ -474,7 +474,7 @@ export default function BooksPage() {
               })
             }
             rows={6}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           />
 
           <PickerList
@@ -526,21 +526,21 @@ export default function BooksPage() {
       {/* Import slide texts modal */}
       {showImport && activeBook && (
         <Modal onClose={() => setShowImport(false)}>
-          <h3 className="text-lg font-semibold mb-4">Import slide texts</h3>
-          <p className="text-xs text-zinc-500 mb-4">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">Import slide texts</h3>
+          <p className="text-xs text-gray-500 mb-4">
             Paste your slide texts below. Each slideshow is separated by a blank
             line. The first line of each group becomes the slideshow name.
           </p>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
             Slideshow name (optional, for single import)
           </label>
           <input
             value={importName}
             onChange={(e) => setImportName(e.target.value)}
             placeholder="Leave blank to use first line of each group"
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           />
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
             Slide texts
           </label>
           <textarea
@@ -548,7 +548,7 @@ export default function BooksPage() {
             onChange={(e) => setImportText(e.target.value)}
             rows={12}
             placeholder={`Slide 1 text\nSlide 2 text\nSlide 3 text\n\nAnother slideshow name\nSlide 1 text\nSlide 2 text`}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm mb-5 font-mono focus:outline-none focus:ring-2 focus:ring-white/20"
+            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-5 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           />
           <ModalButtons
             onCancel={() => setShowImport(false)}
@@ -618,23 +618,23 @@ function PoolTab({
         {items.map((item) => (
           <div
             key={item.id}
-            className="rounded-lg border border-zinc-800 bg-zinc-950 p-3"
+            className="rounded-xl border border-gray-200/60 bg-gray-50 p-3"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm mb-0.5">{item.name}</div>
-                <p className="text-xs text-zinc-500 whitespace-pre-wrap break-words line-clamp-3">{item.value}</p>
+                <div className="font-medium text-sm mb-0.5 text-gray-900">{item.name}</div>
+                <p className="text-xs text-gray-500 whitespace-pre-wrap break-words line-clamp-3">{item.value}</p>
               </div>
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => onEdit(item)}
-                  className="text-xs text-zinc-400 hover:text-white transition-colors"
+                  className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => onDelete(item.id)}
-                  className="text-xs text-red-500 hover:text-red-400 transition-colors"
+                  className="text-xs text-red-500 hover:text-red-600 transition-colors"
                 >
                   Delete
                 </button>
@@ -645,7 +645,7 @@ function PoolTab({
       </div>
       <button
         onClick={onAdd}
-        className="w-full px-5 py-3 rounded-lg border border-dashed border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors text-sm font-medium"
+        className="w-full px-5 py-3 rounded-xl border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors text-sm font-medium"
       >
         + Add {kind === "prompts" ? "image prompt" : "caption"}
       </button>
@@ -669,18 +669,18 @@ function PickerList({
   return (
     <div className="mb-5">
       <div className="flex items-center justify-between mb-2">
-        <label className="text-xs font-medium text-zinc-400">{label}</label>
+        <label className="text-xs font-medium text-gray-500">{label}</label>
         {items.length > 0 && (
           <div className="flex gap-3 text-xs">
             <button
               onClick={() => onChange(items.map((i) => i.id))}
-              className="text-zinc-500 hover:text-white transition-colors"
+              className="text-gray-500 hover:text-gray-900 transition-colors"
             >
               All
             </button>
             <button
               onClick={() => onChange([])}
-              className="text-zinc-500 hover:text-white transition-colors"
+              className="text-gray-500 hover:text-gray-900 transition-colors"
             >
               None
             </button>
@@ -688,15 +688,15 @@ function PickerList({
         )}
       </div>
       {items.length === 0 ? (
-        <p className="text-xs text-zinc-600">{emptyHint}</p>
+        <p className="text-xs text-gray-400">{emptyHint}</p>
       ) : (
-        <div className="space-y-1 max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900 p-2">
+        <div className="space-y-1 max-h-40 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2">
           {items.map((item) => {
             const checked = selected.includes(item.id);
             return (
               <label
                 key={item.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 cursor-pointer"
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 cursor-pointer"
               >
                 <input
                   type="checkbox"
@@ -708,9 +708,9 @@ function PickerList({
                         : [...selected, item.id]
                     )
                   }
-                  className="accent-white"
+                  className="accent-blue-500"
                 />
-                <span className="text-sm text-zinc-300 truncate">
+                <span className="text-sm text-gray-700 truncate">
                   {item.name}
                 </span>
               </label>
@@ -731,11 +731,11 @@ function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 p-6 max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -755,13 +755,13 @@ function ModalButtons({
     <div className="flex gap-3 justify-end">
       <button
         onClick={onCancel}
-        className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm"
+        className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm"
       >
         Cancel
       </button>
       <button
         onClick={onSave}
-        className="px-4 py-2 rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 transition-colors text-sm"
+        className="px-4 py-2 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 transition-colors text-sm shadow-sm"
       >
         Save
       </button>

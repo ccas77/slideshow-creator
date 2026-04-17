@@ -21,19 +21,19 @@ function LoginForm() {
   const errorMessage = errorCode ? ERROR_MESSAGES[errorCode] || ERROR_MESSAGES.unexpected : null;
 
   return (
-    <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl">
-      <h1 className="text-2xl font-bold text-white mb-1">Sign in</h1>
-      <p className="text-sm text-zinc-500 mb-6">Slideshow Creator</p>
+    <div className="w-full max-w-sm bg-white rounded-2xl border border-gray-200/60 p-6 shadow-xl">
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">Sign in</h1>
+      <p className="text-sm text-gray-500 mb-6">Slideshow Creator</p>
 
       {errorMessage && (
-        <div className="text-sm text-red-400 mb-4 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
+        <div className="text-sm text-red-500 mb-4 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
           {errorMessage}
         </div>
       )}
 
       <a
         href="/api/auth/login"
-        className="flex items-center justify-center gap-3 w-full bg-white text-zinc-900 font-medium rounded-lg py-2.5 text-sm hover:bg-zinc-100 transition-colors"
+        className="flex items-center justify-center gap-3 w-full bg-white text-gray-900 font-medium rounded-xl py-2.5 text-sm border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
       >
         <svg className="w-5 h-5" viewBox="0 0 24 24">
           <path
@@ -56,7 +56,7 @@ function LoginForm() {
         Sign in with Google
       </a>
 
-      <p className="text-[11px] text-zinc-600 mt-4 text-center">
+      <p className="text-[11px] text-gray-400 mt-4 text-center">
         Invite-only. Contact an admin for access.
       </p>
     </div>
@@ -65,7 +65,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-zinc-950 via-zinc-900 to-black px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#f5f5f7] px-4">
       <Suspense fallback={null}>
         <LoginForm />
       </Suspense>

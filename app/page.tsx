@@ -623,10 +623,10 @@ export default function Home() {
 
   // ============ SHELL ============
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-white">
+    <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="mx-auto w-full max-w-3xl px-6 sm:px-10 py-10">
         <AppHeader />
-        <p className="text-sm text-zinc-500 mb-6 -mt-4">
+        <p className="text-sm text-gray-500 mb-6 -mt-4">
           {selectedAccount
             ? `Working as @${selectedAccount.username}`
             : "Choose an account to begin"}
@@ -642,18 +642,18 @@ export default function Home() {
                 <div
                   className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold border transition-colors ${
                     active
-                      ? "bg-white text-black border-white"
+                      ? "bg-blue-500 text-gray-900 border-blue-500"
                       : done
-                      ? "bg-zinc-800 text-white border-zinc-700"
-                      : "bg-transparent text-zinc-600 border-zinc-800"
+                      ? "bg-blue-100 text-blue-600 border-blue-200"
+                      : "bg-transparent text-gray-400 border-gray-300"
                   }`}
                 >
                   {done ? "✓" : n}
                 </div>
-                <div className="text-xs text-zinc-500 hidden sm:block">
+                <div className="text-xs text-gray-500 hidden sm:block">
                   {n === 1 ? "Account" : n === 2 ? "Content" : "Slides"}
                 </div>
-                {n < 3 && <div className="flex-1 h-px bg-zinc-800" />}
+                {n < 3 && <div className="flex-1 h-px bg-gray-200" />}
               </div>
             );
           })}
@@ -661,17 +661,17 @@ export default function Home() {
 
         {/* ============ STEP 1: Account ============ */}
         {step === 1 && (
-          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8">
-            <h2 className="text-lg font-semibold mb-1">Choose TikTok account</h2>
-            <p className="text-sm text-zinc-500 mb-6">
+          <section className="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-8">
+            <h2 className="text-lg font-semibold mb-1 text-gray-900">Choose TikTok account</h2>
+            <p className="text-sm text-gray-500 mb-6">
               Your prompts and slide texts are saved separately per account.
             </p>
 
             {accounts.length === 0 ? (
-              <p className="text-sm text-zinc-500">Loading accounts…</p>
+              <p className="text-sm text-gray-500">Loading accounts…</p>
             ) : (
               <>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                <label className="block text-sm font-medium text-gray-500 mb-2">
                   Account
                 </label>
                 <select
@@ -679,7 +679,7 @@ export default function Home() {
                   onChange={(e) =>
                     setAccountId(e.target.value ? Number(e.target.value) : null)
                   }
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20 mb-6"
+                  className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 mb-6"
                 >
                   <option value="">Select an account…</option>
                   {accounts.map((a) => (
@@ -690,13 +690,13 @@ export default function Home() {
                 </select>
 
                 {accountId != null && !loadingAccount && (
-                  <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+                  <div className="mb-6 rounded-xl border border-gray-200/60 bg-gray-50 p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <div className="text-sm font-medium text-white">
+                        <div className="text-sm font-medium text-gray-900">
                           Automate daily posts
                         </div>
-                        <div className="text-xs text-zinc-500 mt-0.5">
+                        <div className="text-xs text-gray-500 mt-0.5">
                           Picks a random prompt, text set & caption from this
                           account&apos;s saved items.
                         </div>
@@ -706,7 +706,7 @@ export default function Home() {
                           setConfig({ ...config, enabled: !config.enabled })
                         }
                         className={`relative w-11 h-6 rounded-full transition-colors ${
-                          config.enabled ? "bg-green-500" : "bg-zinc-700"
+                          config.enabled ? "bg-green-500" : "bg-gray-300"
                         }`}
                         aria-label="Toggle automation"
                       >
@@ -722,7 +722,7 @@ export default function Home() {
                       <>
                         <div className="mb-1">
                           <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs text-zinc-500">
+                            <label className="text-xs text-gray-500">
                               Posting intervals (1 post per interval)
                             </label>
                             <button
@@ -733,7 +733,7 @@ export default function Home() {
                                 ];
                                 setConfig({ ...config, intervals });
                               }}
-                              className="text-xs text-zinc-400 hover:text-white transition-colors"
+                              className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
                             >
                               + Add interval
                             </button>
@@ -747,7 +747,7 @@ export default function Home() {
                               className="grid grid-cols-[1fr_1fr_auto] gap-2 mb-2 items-end"
                             >
                               <div>
-                                <label className="block text-xs text-zinc-500 mb-1">
+                                <label className="block text-xs text-gray-500 mb-1">
                                   From
                                 </label>
                                 <input
@@ -763,11 +763,11 @@ export default function Home() {
                                     };
                                     setConfig({ ...config, intervals });
                                   }}
-                                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                                 />
                               </div>
                               <div>
-                                <label className="block text-xs text-zinc-500 mb-1">
+                                <label className="block text-xs text-gray-500 mb-1">
                                   To
                                 </label>
                                 <input
@@ -783,7 +783,7 @@ export default function Home() {
                                     };
                                     setConfig({ ...config, intervals });
                                   }}
-                                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                                 />
                               </div>
                               <button
@@ -795,19 +795,19 @@ export default function Home() {
                                   intervals.splice(idx, 1);
                                   setConfig({ ...config, intervals });
                                 }}
-                                className="pb-2 text-zinc-600 hover:text-red-400 transition-colors text-sm"
+                                className="pb-2 text-gray-400 hover:text-red-500 transition-colors text-sm"
                                 title="Remove interval"
                               >
                                 ✕
                               </button>
                             </div>
                           ))}
-                          <p className="text-xs text-zinc-600 mt-1">
+                          <p className="text-xs text-gray-400 mt-1">
                             Each interval schedules 1 post at a random time within it.
                           </p>
                         </div>
                         {lastRun && (
-                          <p className="text-xs text-zinc-600 mt-2">
+                          <p className="text-xs text-gray-400 mt-2">
                             Last run: {new Date(lastRun).toLocaleString()} —{" "}
                             {lastStatus}
                           </p>
@@ -818,14 +818,14 @@ export default function Home() {
                 )}
 
                 {accountId != null && config.enabled && (
-                  <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
-                    <div className="text-sm font-medium text-white mb-3">
+                  <div className="mb-6 rounded-xl border border-gray-200/60 bg-gray-50 p-5">
+                    <div className="text-sm font-medium text-gray-900 mb-3">
                       Source book & slideshows
                     </div>
                     {books.length === 0 ? (
-                      <p className="text-xs text-zinc-500">
+                      <p className="text-xs text-gray-500">
                         No books yet. Create one on the{" "}
-                        <a href="/books" className="underline hover:text-white">
+                        <a href="/books" className="underline hover:text-gray-900">
                           Books
                         </a>{" "}
                         page first.
@@ -837,7 +837,7 @@ export default function Home() {
                       );
                       return (
                         <>
-                          <label className="text-xs text-zinc-500 mb-1 block">
+                          <label className="text-xs text-gray-500 mb-1 block">
                             Books
                           </label>
                           <div className="space-y-1 max-h-40 overflow-y-auto mb-4">
@@ -846,7 +846,7 @@ export default function Home() {
                               return (
                                 <label
                                   key={b.id}
-                                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-900 cursor-pointer"
+                                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
                                 >
                                   <input
                                     type="checkbox"
@@ -866,12 +866,12 @@ export default function Home() {
                                         setExpandedBooks((prev) => [...prev, b.id]);
                                       }
                                     }}
-                                    className="accent-white"
+                                    className="accent-blue-500"
                                   />
-                                  <span className="text-sm text-zinc-300">
+                                  <span className="text-sm text-gray-700">
                                     {b.name}
                                   </span>
-                                  <span className="text-xs text-zinc-600 ml-auto">
+                                  <span className="text-xs text-gray-400 ml-auto">
                                     {b.slideshows.length} slideshows
                                   </span>
                                 </label>
@@ -882,7 +882,7 @@ export default function Home() {
                           {selectedBooks.length > 0 && (
                             <>
                               <div className="flex items-center justify-between mb-1">
-                                <label className="text-xs text-zinc-500">
+                                <label className="text-xs text-gray-500">
                                   Slideshows
                                 </label>
                                 <div className="flex gap-3 text-xs">
@@ -905,7 +905,7 @@ export default function Home() {
                                         selections: all,
                                       });
                                     }}
-                                    className="text-zinc-500 hover:text-white transition-colors"
+                                    className="text-gray-500 hover:text-blue-500 transition-colors"
                                   >
                                     All
                                   </button>
@@ -916,7 +916,7 @@ export default function Home() {
                                         selections: [],
                                       });
                                     }}
-                                    className="text-zinc-500 hover:text-white transition-colors"
+                                    className="text-gray-500 hover:text-blue-500 transition-colors"
                                   >
                                     None
                                   </button>
@@ -925,7 +925,7 @@ export default function Home() {
                               <div className="space-y-1 max-h-48 overflow-y-auto">
                                 {selectedBooks.map((b) => (
                                   <div key={b.id}>
-                                    <div className="text-xs font-medium text-zinc-400 px-2 pt-2 pb-1">
+                                    <div className="text-xs font-medium text-gray-400 px-2 pt-2 pb-1">
                                       {b.name}
                                     </div>
                                     {b.slideshows.map((s) => {
@@ -937,7 +937,7 @@ export default function Home() {
                                       return (
                                         <label
                                           key={s.id}
-                                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-900 cursor-pointer"
+                                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
                                         >
                                           <input
                                             type="checkbox"
@@ -963,12 +963,12 @@ export default function Home() {
                                                     ],
                                               });
                                             }}
-                                            className="accent-white"
+                                            className="accent-blue-500"
                                           />
-                                          <span className="text-sm text-zinc-300">
+                                          <span className="text-sm text-gray-700">
                                             {s.name}
                                           </span>
-                                          <span className="text-xs text-zinc-600 ml-auto">
+                                          <span className="text-xs text-gray-400 ml-auto">
                                             {
                                               s.slideTexts
                                                 .split("\n")
@@ -984,7 +984,7 @@ export default function Home() {
                               </div>
                             </>
                           )}
-                          <p className="text-xs text-zinc-600 mt-2">
+                          <p className="text-xs text-gray-400 mt-2">
                             Pick books first, then choose which slideshows to
                             include. Cron picks randomly across all selected.
                           </p>
@@ -997,7 +997,7 @@ export default function Home() {
                 <button
                   onClick={() => setStep(2)}
                   disabled={accountId == null}
-                  className="w-full px-6 py-3 rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+                  className="w-full px-6 py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
                 >
                   Continue
                 </button>
@@ -1010,8 +1010,8 @@ export default function Home() {
         {step === 2 && (
           <section className="space-y-6">
             {/* Library actions */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 flex flex-wrap items-center gap-3">
-              <div className="text-sm text-zinc-400 mr-auto">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5 flex flex-wrap items-center gap-3">
+              <div className="text-sm text-gray-400 mr-auto">
                 Library:
               </div>
               <select
@@ -1022,7 +1022,7 @@ export default function Home() {
                   const s = b?.slideshows.find((x) => x.id === slideshowId);
                   if (s && b) loadSlideshowIntoEditor(s, b);
                 }}
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               >
                 <option value="">Load from book…</option>
                 {books.map((b) => (
@@ -1037,15 +1037,15 @@ export default function Home() {
               </select>
               <button
                 onClick={saveDraftToBook}
-                className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition-colors text-sm font-medium"
+                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
               >
                 Save to book
               </button>
             </div>
 
             {/* Image prompt */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Background image prompt
               </label>
               <textarea
@@ -1053,16 +1053,16 @@ export default function Home() {
                 onChange={(e) => setImagePrompt(e.target.value)}
                 placeholder="Describe the background image for all slides..."
                 rows={3}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 resize-none"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 resize-none"
               />
             </div>
 
             {/* Slide texts */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Slide texts
               </label>
-              <p className="text-xs text-zinc-500 mb-3">
+              <p className="text-xs text-gray-500 mb-3">
                 One slide per line. Empty lines are ignored.
               </p>
               <textarea
@@ -1070,16 +1070,16 @@ export default function Home() {
                 onChange={(e) => setBulkText(e.target.value)}
                 placeholder={"First slide text\nSecond slide text\nThird slide text"}
                 rows={8}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
               />
-              <p className="text-xs text-zinc-600 mt-2">
+              <p className="text-xs text-gray-400 mt-2">
                 {slideCount} slide{slideCount !== 1 ? "s" : ""}
               </p>
             </div>
 
             {/* Caption */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 TikTok caption
               </label>
               <textarea
@@ -1087,12 +1087,12 @@ export default function Home() {
                 onChange={(e) => setCaption(e.target.value)}
                 placeholder="Caption that appears on the TikTok post..."
                 rows={3}
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 resize-none"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 resize-none"
               />
             </div>
 
             {error && (
-              <div className="p-4 rounded-lg bg-red-950/50 border border-red-900/50 text-red-400 text-sm">
+              <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-500 text-sm">
                 {error}
               </div>
             )}
@@ -1100,19 +1100,19 @@ export default function Home() {
             <div className="flex gap-3">
               <button
                 onClick={() => setStep(1)}
-                className="px-5 py-3 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm font-medium"
+                className="px-5 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
               >
                 ← Back
               </button>
               <button
                 onClick={generate}
                 disabled={loading || !imagePrompt.trim() || slideCount === 0}
-                className="flex-1 px-6 py-3 rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+                className="flex-1 px-6 py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
                     <span
-                      className="inline-block w-4 h-4 border-2 border-black/20 border-t-black rounded-full"
+                      className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
                       style={{ animation: "spin 0.6s linear infinite" }}
                     />
                     Generating…
@@ -1127,11 +1127,11 @@ export default function Home() {
 
         {/* ============ STEP 3: Slides ============ */}
         {step === 3 && slideshow && (
-          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8">
+          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 sm:p-8">
             <div className="flex flex-col items-center">
               {/* Slide frame — responsive, fits viewport */}
               <div
-                className="relative rounded-2xl overflow-hidden shadow-2xl bg-zinc-950"
+                className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-50"
                 style={{
                   width: "min(100%, 320px)",
                   aspectRatio: "9 / 16",
@@ -1198,11 +1198,11 @@ export default function Home() {
                 <button
                   onClick={() => setCurrentSlide((i) => Math.max(0, i - 1))}
                   disabled={currentSlide === 0}
-                  className="w-10 h-10 rounded-full border border-zinc-700 text-white disabled:text-zinc-700 disabled:border-zinc-800 hover:bg-zinc-800 transition-colors"
+                  className="w-10 h-10 rounded-full border border-gray-300 text-gray-900 disabled:text-gray-300 disabled:border-gray-200 hover:bg-gray-200 transition-colors"
                 >
                   ‹
                 </button>
-                <div className="text-sm text-zinc-400 tabular-nums">
+                <div className="text-sm text-gray-400 tabular-nums">
                   {currentSlide + 1} / {slideshow.texts.length}
                 </div>
                 <button
@@ -1212,7 +1212,7 @@ export default function Home() {
                     )
                   }
                   disabled={currentSlide === slideshow.texts.length - 1}
-                  className="w-10 h-10 rounded-full border border-zinc-700 text-white disabled:text-zinc-700 disabled:border-zinc-800 hover:bg-zinc-800 transition-colors"
+                  className="w-10 h-10 rounded-full border border-gray-300 text-gray-900 disabled:text-gray-300 disabled:border-gray-200 hover:bg-gray-200 transition-colors"
                 >
                   ›
                 </button>
@@ -1230,7 +1230,7 @@ export default function Home() {
                       borderRadius: 4,
                       border: "none",
                       background:
-                        i === currentSlide ? "white" : "rgba(255,255,255,0.25)",
+                        i === currentSlide ? "#3b82f6" : "rgba(0,0,0,0.15)",
                       cursor: "pointer",
                       transition: "all 0.3s",
                     }}
@@ -1241,7 +1241,7 @@ export default function Home() {
               {postStatus && (
                 <div
                   className={`mt-5 text-sm ${
-                    postStatus.includes("Posted") ? "text-green-400" : "text-red-400"
+                    postStatus.includes("Posted") ? "text-green-500" : "text-red-500"
                   }`}
                 >
                   {postStatus}
@@ -1257,27 +1257,27 @@ export default function Home() {
                     setCurrentSlide(0);
                     setStep(1);
                   }}
-                  className="px-5 py-2.5 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm font-medium"
+                  className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
                 >
                   ⌂ Home
                 </button>
                 <button
                   onClick={() => setStep(2)}
-                  className="px-5 py-2.5 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm font-medium"
+                  className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
                 >
                   ← Edit
                 </button>
                 <button
                   onClick={downloadAll}
                   disabled={downloading}
-                  className="px-5 py-2.5 rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 transition-colors text-sm font-medium disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium disabled:opacity-50"
                 >
                   {downloading ? "Downloading…" : "Download all"}
                 </button>
                 <button
                   onClick={postToTikTok}
                   disabled={posting}
-                  className="px-5 py-2.5 rounded-lg text-white font-semibold text-sm disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
                   style={{
                     background: "linear-gradient(135deg, #ff0050, #00f2ea)",
                   }}

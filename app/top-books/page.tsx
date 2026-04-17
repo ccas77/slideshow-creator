@@ -433,25 +433,25 @@ export default function TopBooksPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-white">
+    <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="mx-auto w-full max-w-4xl px-6 sm:px-10 py-10">
         <AppHeader />
 
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Top Books</h1>
-          <button onClick={load} className="text-sm text-zinc-500 hover:text-white transition-colors">
+          <button onClick={load} className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
             {loading ? "Loading..." : "Refresh"}
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-zinc-900 rounded-lg p-1 w-fit">
+        <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">
           {(["books", "lists"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-md text-sm transition-colors ${
-                tab === t ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"
+              className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                tab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
               }`}
             >
               {t === "books" ? `Books (${books.length})` : `Lists (${lists.length})`}
@@ -459,22 +459,22 @@ export default function TopBooksPage() {
           ))}
         </div>
 
-        {/* ═══ BOOKS TAB ═══ */}
+        {/* BOOKS TAB */}
         {tab === "books" && (
           <>
             <div className="flex items-center gap-3 mb-6 flex-wrap">
               <button
                 onClick={() => openBookForm()}
-                className="rounded-lg bg-white text-black px-4 py-2 text-sm font-medium hover:bg-zinc-200 transition-colors"
+                className="rounded-xl bg-blue-500 text-white px-4 py-2 text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm"
               >
                 + Add Book
               </button>
               {genres.length > 1 && (
-                <div className="flex gap-1 bg-zinc-900 rounded-lg p-1 flex-wrap">
+                <div className="flex gap-1 bg-gray-100 rounded-xl p-1 flex-wrap">
                   <button
                     onClick={() => setGenreFilter("all")}
-                    className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                      genreFilter === "all" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"
+                    className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                      genreFilter === "all" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
                     }`}
                   >
                     All ({books.length})
@@ -488,8 +488,8 @@ export default function TopBooksPage() {
                       <button
                         key={g}
                         onClick={() => setGenreFilter(g)}
-                        className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                          genreFilter === g ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-white"
+                        className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                          genreFilter === g ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
                         }`}
                       >
                         {g} ({count})
@@ -507,25 +507,25 @@ export default function TopBooksPage() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-10 text-center text-zinc-500">
+              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-10 text-center text-gray-500">
                 No books yet. Add some to get started.
               </div>
             )}
           </>
         )}
 
-        {/* ═══ LISTS TAB ═══ */}
+        {/* LISTS TAB */}
         {tab === "lists" && (
           <>
             <button
               onClick={() => openListForm()}
-              className="mb-6 rounded-lg bg-white text-black px-4 py-2 text-sm font-medium hover:bg-zinc-200 transition-colors"
+              className="mb-6 rounded-xl bg-blue-500 text-white px-4 py-2 text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm"
             >
               + New List
             </button>
 
             {lists.length === 0 ? (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-10 text-center text-zinc-500">
+              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-10 text-center text-gray-500">
                 No lists yet. Create one to build a Top N slideshow.
               </div>
             ) : (
@@ -535,18 +535,18 @@ export default function TopBooksPage() {
                   const auto = l.automation;
                   const autoOn = !!auto?.enabled && !!auto?.intervals?.length && !!auto?.accountIds?.length;
                   return (
-                    <div key={l.id} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+                    <div key={l.id} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{l.name}</span>
+                            <span className="font-medium text-gray-900">{l.name}</span>
                             {autoOn && (
-                              <span className="text-[10px] uppercase tracking-wide bg-green-500/15 text-green-300 px-1.5 py-0.5 rounded">
+                              <span className="text-[10px] uppercase tracking-wide bg-green-50 text-green-600 px-1.5 py-0.5 rounded">
                                 Auto · {auto!.intervals.length}/day · {auto!.accountIds.length} acct
                               </span>
                             )}
                           </div>
-                          <div className="text-sm text-zinc-400 mt-1">
+                          <div className="text-sm text-gray-500 mt-1">
                             {(l.titleTexts || []).length} title{(l.titleTexts || []).length !== 1 ? "s" : ""} &middot; {l.count} books from {listBooks.length} in pool
                           </div>
                           {listBooks.length > 0 && (
@@ -555,7 +555,7 @@ export default function TopBooksPage() {
                                 <img key={b.id} src={b.coverData} alt={b.title} className="w-8 h-12 rounded object-cover" />
                               ))}
                               {listBooks.length > 8 && (
-                                <span className="text-xs text-zinc-500 self-center ml-1">+{listBooks.length - 8}</span>
+                                <span className="text-xs text-gray-500 self-center ml-1">+{listBooks.length - 8}</span>
                               )}
                             </div>
                           )}
@@ -565,22 +565,22 @@ export default function TopBooksPage() {
                             onClick={() => openAutomation(l)}
                             className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
                               autoOn
-                                ? "bg-green-600 hover:bg-green-500 text-white"
-                                : "bg-zinc-700 hover:bg-zinc-600 text-white"
+                                ? "bg-green-500 hover:bg-green-600 text-white"
+                                : "bg-gray-100 hover:bg-gray-200 text-gray-700"
                             }`}
                           >
                             {autoOn ? "Auto on" : "Automate"}
                           </button>
                           <button
                             onClick={() => { setPublishListId(l.id); setPublishAccounts([]); setPublishResult(null); setScheduledAt(""); }}
-                            className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition-colors"
+                            className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors shadow-sm"
                           >
                             Publish
                           </button>
-                          <button onClick={() => openListForm(l)} className="text-xs text-zinc-400 hover:text-white transition-colors">
+                          <button onClick={() => openListForm(l)} className="text-xs text-gray-500 hover:text-gray-900 transition-colors">
                             Edit
                           </button>
-                          <button onClick={() => deleteList(l.id)} className="text-xs text-red-400 hover:text-red-300 transition-colors">
+                          <button onClick={() => deleteList(l.id)} className="text-xs text-red-500 hover:text-red-600 transition-colors">
                             Delete
                           </button>
                         </div>
@@ -593,91 +593,91 @@ export default function TopBooksPage() {
           </>
         )}
 
-        {/* ═══ BOOK FORM MODAL ═══ */}
+        {/* BOOK FORM MODAL */}
         {showBookForm && (
           <Modal onClose={() => setShowBookForm(false)} title={editBookId ? "Edit Book" : "Add Book"}>
             <div className="space-y-4">
               {!editBookId && (
                 <div>
-                  <label className="text-xs text-zinc-400 block mb-1">Cover Image URL {fetchingUrl && <span className="text-blue-400 ml-1">Fetching...</span>}</label>
+                  <label className="text-xs text-gray-500 block mb-1">Cover Image URL {fetchingUrl && <span className="text-blue-500 ml-1">Fetching...</span>}</label>
                   <div className="flex gap-2">
                     <input
                       value={bookUrl}
                       onChange={(e) => setBookUrl(e.target.value)}
                       placeholder="Paste image URL (right-click cover → Copy Image Address)"
-                      className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); fetchBookUrl(); } }}
                     />
                     <button
                       onClick={fetchBookUrl}
                       disabled={fetchingUrl || !bookUrl.trim()}
-                      className="rounded-lg bg-zinc-700 hover:bg-zinc-600 px-3 py-2 text-sm text-white transition-colors disabled:opacity-50 shrink-0"
+                      className="rounded-xl bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm text-gray-700 transition-colors disabled:opacity-40 shrink-0"
                     >
                       Fetch
                     </button>
                   </div>
-                  <p className="text-[11px] text-zinc-600 mt-1">Fetches cover and auto-detects title &amp; author</p>
-                  {fetchUrlError && <p className="text-[11px] text-red-400 mt-1">{fetchUrlError}</p>}
+                  <p className="text-[11px] text-gray-400 mt-1">Fetches cover and auto-detects title &amp; author</p>
+                  {fetchUrlError && <p className="text-[11px] text-red-500 mt-1">{fetchUrlError}</p>}
                 </div>
               )}
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Title * {recognizing && <span className="text-blue-400 ml-1">Recognizing...</span>}</label>
-                <input value={bookTitle} onChange={(e) => setBookTitle(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20" />
+                <label className="text-xs text-gray-500 block mb-1">Title * {recognizing && <span className="text-blue-500 ml-1">Recognizing...</span>}</label>
+                <input value={bookTitle} onChange={(e) => setBookTitle(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Author</label>
-                <input value={bookAuthor} onChange={(e) => setBookAuthor(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20" />
+                <label className="text-xs text-gray-500 block mb-1">Author</label>
+                <input value={bookAuthor} onChange={(e) => setBookAuthor(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Genre</label>
-                <input value={bookGenre} onChange={(e) => setBookGenre(e.target.value)} placeholder="e.g. Dark Romance, Thriller, Fantasy" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20" />
-                <p className="text-[11px] text-zinc-600 mt-1">Separate multiple genres with commas</p>
+                <label className="text-xs text-gray-500 block mb-1">Genre</label>
+                <input value={bookGenre} onChange={(e) => setBookGenre(e.target.value)} placeholder="e.g. Dark Romance, Thriller, Fantasy" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                <p className="text-[11px] text-gray-400 mt-1">Separate multiple genres with commas</p>
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Cover Image {!editBookId && "*"}</label>
-                <input type="file" accept="image/*" onChange={handleCoverFile} className="text-sm text-zinc-400" />
+                <label className="text-xs text-gray-500 block mb-1">Cover Image {!editBookId && "*"}</label>
+                <input type="file" accept="image/*" onChange={handleCoverFile} className="text-sm text-gray-500" />
                 {bookCoverPreview && (
                   <img src={bookCoverPreview} alt="Cover" className="mt-2 w-24 h-36 rounded object-cover" />
                 )}
               </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={bookPinned} onChange={(e) => setBookPinned(e.target.checked)} className="rounded" />
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={bookPinned} onChange={(e) => setBookPinned(e.target.checked)} className="accent-blue-500 rounded" />
                 Always recommended (pinned)
               </label>
-              <button onClick={saveBook} disabled={loading} className="w-full rounded-lg bg-white text-black py-2 text-sm font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50">
+              <button onClick={saveBook} disabled={loading} className="w-full rounded-xl bg-blue-500 text-white py-2.5 text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-40 shadow-sm">
                 {loading ? "Saving..." : "Save"}
               </button>
             </div>
           </Modal>
         )}
 
-        {/* ═══ LIST FORM MODAL ═══ */}
+        {/* LIST FORM MODAL */}
         {showListForm && (
           <Modal onClose={() => setShowListForm(false)} title={editListId ? "Edit List" : "New List"}>
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">List Name *</label>
-                <input value={listName} onChange={(e) => setListName(e.target.value)} placeholder="e.g. Dark Romance" className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20" />
+                <label className="text-xs text-gray-500 block mb-1">List Name *</label>
+                <input value={listName} onChange={(e) => setListName(e.target.value)} placeholder="e.g. Dark Romance" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Title Slide Texts * (one per line, random pick each publish)</label>
-                <textarea value={listTitles} onChange={(e) => setListTitles(e.target.value)} rows={3} placeholder={"Top 10 Dark Romance Books\nDark Romance Must-Reads\nBooks That Will Ruin You"} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20" />
+                <label className="text-xs text-gray-500 block mb-1">Title Slide Texts * (one per line, random pick each publish)</label>
+                <textarea value={listTitles} onChange={(e) => setListTitles(e.target.value)} rows={3} placeholder={"Top 10 Dark Romance Books\nDark Romance Must-Reads\nBooks That Will Ruin You"} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Number of books to include</label>
-                <input type="number" min={1} value={listCount} onChange={(e) => setListCount(Number(e.target.value))} className="w-24 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20" />
+                <label className="text-xs text-gray-500 block mb-1">Number of books to include</label>
+                <input type="number" min={1} value={listCount} onChange={(e) => setListCount(Number(e.target.value))} className="w-24 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Captions (separate each caption with a blank line)</label>
-                <textarea value={listCaptions} onChange={(e) => setListCaptions(e.target.value)} rows={5} placeholder={"First caption here with #hashtags\n\nSecond caption variation\n\nThird caption option"} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20" />
+                <label className="text-xs text-gray-500 block mb-1">Captions (separate each caption with a blank line)</label>
+                <textarea value={listCaptions} onChange={(e) => setListCaptions(e.target.value)} rows={5} placeholder={"First caption here with #hashtags\n\nSecond caption variation\n\nThird caption option"} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Background image prompts (one per line, random pick each publish)</label>
-                <textarea value={listBgPrompts} onChange={(e) => setListBgPrompts(e.target.value)} rows={3} placeholder={"Dark moody roses and shadows\nMystery bookshelf with candlelight\nGothic castle at night"} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20" />
-                <p className="text-[11px] text-zinc-600 mt-1">Leave empty for plain dark background</p>
+                <label className="text-xs text-gray-500 block mb-1">Background image prompts (one per line, random pick each publish)</label>
+                <textarea value={listBgPrompts} onChange={(e) => setListBgPrompts(e.target.value)} rows={3} placeholder={"Dark moody roses and shadows\nMystery bookshelf with candlelight\nGothic castle at night"} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+                <p className="text-[11px] text-gray-400 mt-1">Leave empty for plain dark background</p>
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-2">
+                <label className="text-xs text-gray-500 block mb-2">
                   Select books ({listBookIds.length} selected, {books.filter((b) => b.pinned).length} pinned)
                 </label>
                 <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto">
@@ -687,10 +687,10 @@ export default function TopBooksPage() {
                       <button
                         key={b.id}
                         onClick={() => toggleBookInList(b.id)}
-                        className={`flex items-center gap-2 p-2 rounded-lg border text-left text-xs transition-colors ${
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-left text-xs transition-colors ${
                           selected
-                            ? "border-blue-500 bg-blue-500/10 text-white"
-                            : "border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-zinc-600"
+                            ? "border-blue-500 bg-blue-50 text-gray-900"
+                            : "border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300"
                         }`}
                       >
                         <img src={b.coverData} alt="" className="w-6 h-9 rounded object-cover shrink-0" />
@@ -702,27 +702,27 @@ export default function TopBooksPage() {
                   })}
                 </div>
               </div>
-              <button onClick={saveList} className="w-full rounded-lg bg-white text-black py-2 text-sm font-medium hover:bg-zinc-200 transition-colors">
+              <button onClick={saveList} className="w-full rounded-xl bg-blue-500 text-white py-2.5 text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm">
                 Save
               </button>
             </div>
           </Modal>
         )}
 
-        {/* ═══ PUBLISH MODAL ═══ */}
+        {/* PUBLISH MODAL */}
         {publishListId && (
           <Modal onClose={() => setPublishListId(null)} title="Publish to TikTok">
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-zinc-400 block mb-2">Select accounts</label>
+                <label className="text-xs text-gray-500 block mb-2">Select accounts</label>
                 <div className="space-y-2">
                   {accounts.map((a) => (
-                    <label key={a.id} className="flex items-center gap-2 text-sm">
+                    <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700">
                       <input
                         type="checkbox"
                         checked={publishAccounts.includes(a.id)}
                         onChange={() => togglePublishAccount(a.id)}
-                        className="rounded"
+                        className="accent-blue-500 rounded"
                       />
                       @{a.username}
                     </label>
@@ -730,24 +730,24 @@ export default function TopBooksPage() {
                 </div>
               </div>
               <div>
-                <label className="text-xs text-zinc-400 block mb-1">Schedule (optional)</label>
+                <label className="text-xs text-gray-500 block mb-1">Schedule (optional)</label>
                 <input
                   type="datetime-local"
                   value={scheduledAt}
                   onChange={(e) => setScheduledAt(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                 />
-                <p className="text-[11px] text-zinc-600 mt-1">Leave empty to publish immediately</p>
+                <p className="text-[11px] text-gray-400 mt-1">Leave empty to publish immediately</p>
               </div>
               <button
                 onClick={publishList}
                 disabled={publishing || publishAccounts.length === 0}
-                className="w-full rounded-lg bg-blue-600 hover:bg-blue-500 text-white py-2 text-sm font-medium transition-colors disabled:opacity-50"
+                className="w-full rounded-xl bg-blue-500 hover:bg-blue-600 text-white py-2.5 text-sm font-medium transition-colors disabled:opacity-40 shadow-sm"
               >
                 {publishing ? "Publishing..." : scheduledAt ? "Schedule" : "Publish Now"}
               </button>
               {publishResult && (
-                <div className={`text-sm p-3 rounded-lg ${publishResult.startsWith("Error") ? "bg-red-500/10 text-red-300" : "bg-green-500/10 text-green-300"}`}>
+                <div className={`text-sm p-3 rounded-xl ${publishResult.startsWith("Error") ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"}`}>
                   {publishResult}
                 </div>
               )}
@@ -755,33 +755,33 @@ export default function TopBooksPage() {
           </Modal>
         )}
 
-        {/* ═══ AUTOMATION MODAL ═══ */}
+        {/* AUTOMATION MODAL */}
         {autoListId && (
           <Modal onClose={() => setAutoListId(null)} title="Automate this list">
             <div className="space-y-4">
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input
                   type="checkbox"
                   checked={autoEnabled}
                   onChange={(e) => setAutoEnabled(e.target.checked)}
-                  className="rounded"
+                  className="accent-blue-500 rounded"
                 />
                 Enable auto-posting
               </label>
 
               <div>
-                <label className="text-xs text-zinc-400 block mb-2">Post to accounts</label>
+                <label className="text-xs text-gray-500 block mb-2">Post to accounts</label>
                 <div className="space-y-2">
                   {accounts.length === 0 && (
-                    <p className="text-xs text-zinc-500">No accounts available. Configure them in Settings.</p>
+                    <p className="text-xs text-gray-500">No accounts available. Configure them in Settings.</p>
                   )}
                   {accounts.map((a) => (
-                    <label key={a.id} className="flex items-center gap-2 text-sm">
+                    <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700">
                       <input
                         type="checkbox"
                         checked={autoAccounts.includes(a.id)}
                         onChange={() => toggleAutoAccount(a.id)}
-                        className="rounded"
+                        className="accent-blue-500 rounded"
                       />
                       @{a.username}
                     </label>
@@ -791,15 +791,15 @@ export default function TopBooksPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs text-zinc-400">Daily time windows (UTC)</label>
+                  <label className="text-xs text-gray-500">Daily time windows (UTC)</label>
                   <button
                     onClick={addAutoInterval}
-                    className="text-xs text-blue-400 hover:text-blue-300"
+                    className="text-xs text-blue-500 hover:text-blue-600"
                   >
                     + Add window
                   </button>
                 </div>
-                <p className="text-[11px] text-zinc-600 mb-2">
+                <p className="text-[11px] text-gray-400 mb-2">
                   One post is scheduled per window per day, at a random time inside the window.
                 </p>
                 <div className="space-y-2">
@@ -809,19 +809,19 @@ export default function TopBooksPage() {
                         type="time"
                         value={w.start}
                         onChange={(e) => updateAutoInterval(i, "start", e.target.value)}
-                        className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                        className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                       />
-                      <span className="text-zinc-500 text-sm">→</span>
+                      <span className="text-gray-400 text-sm">&rarr;</span>
                       <input
                         type="time"
                         value={w.end}
                         onChange={(e) => updateAutoInterval(i, "end", e.target.value)}
-                        className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                        className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                       />
                       {autoIntervals.length > 1 && (
                         <button
                           onClick={() => removeAutoInterval(i)}
-                          className="text-xs text-red-400 hover:text-red-300 ml-auto"
+                          className="text-xs text-red-500 hover:text-red-600 ml-auto"
                         >
                           Remove
                         </button>
@@ -834,7 +834,7 @@ export default function TopBooksPage() {
               <button
                 onClick={saveAutomation}
                 disabled={savingAuto}
-                className="w-full rounded-lg bg-white text-black py-2 text-sm font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50"
+                className="w-full rounded-xl bg-blue-500 text-white py-2.5 text-sm font-medium hover:bg-blue-600 transition-colors disabled:opacity-40 shadow-sm"
               >
                 {savingAuto ? "Saving..." : "Save automation"}
               </button>
@@ -858,17 +858,17 @@ function BookCard({
   onTogglePin: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 group">
-      <img src={book.coverData} alt={book.title} className="w-full aspect-[2/3] rounded-lg object-cover mb-2" />
-      <div className="text-sm font-medium truncate">{book.title}</div>
-      {book.author && <div className="text-xs text-zinc-500 truncate">{book.author}</div>}
-      {book.genre && <div className="text-[10px] text-zinc-600 truncate">{book.genre}</div>}
+    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-3 group">
+      <img src={book.coverData} alt={book.title} className="w-full aspect-[2/3] rounded-xl object-cover mb-2" />
+      <div className="text-sm font-medium truncate text-gray-900">{book.title}</div>
+      {book.author && <div className="text-xs text-gray-500 truncate">{book.author}</div>}
+      {book.genre && <div className="text-[10px] text-gray-400 truncate">{book.genre}</div>}
       <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={onTogglePin} className={`text-[10px] px-1.5 py-0.5 rounded ${book.pinned ? "bg-amber-500/20 text-amber-300" : "bg-zinc-700 text-zinc-400"}`}>
+        <button onClick={onTogglePin} className={`text-[10px] px-1.5 py-0.5 rounded ${book.pinned ? "bg-amber-50 text-amber-600" : "bg-gray-100 text-gray-500"}`}>
           {book.pinned ? "Pinned" : "Pin"}
         </button>
-        <button onClick={onEdit} className="text-[10px] text-zinc-400 hover:text-white">Edit</button>
-        <button onClick={onDelete} className="text-[10px] text-red-400 hover:text-red-300">Delete</button>
+        <button onClick={onEdit} className="text-[10px] text-gray-500 hover:text-gray-900">Edit</button>
+        <button onClick={onDelete} className="text-[10px] text-red-500 hover:text-red-600">Delete</button>
       </div>
     </div>
   );
@@ -876,11 +876,11 @@ function BookCard({
 
 function Modal({ children, onClose, title }: { children: React.ReactNode; onClose: () => void; title: string }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">{title}</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl">&times;</button>
+          <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
         </div>
         {children}
       </div>

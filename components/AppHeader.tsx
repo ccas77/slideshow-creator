@@ -42,7 +42,7 @@ export default function AppHeader() {
       <Link
         href={href}
         className={`text-sm transition-colors ${
-          active ? "text-white font-medium" : "text-zinc-500 hover:text-white"
+          active ? "text-blue-500 font-medium" : "text-gray-500 hover:text-gray-900"
         }`}
       >
         {label}
@@ -51,9 +51,9 @@ export default function AppHeader() {
   };
 
   return (
-    <header className="flex items-center justify-between gap-4 mb-8 flex-wrap">
+    <header className="flex items-center justify-between gap-4 mb-8 flex-wrap bg-white/80 backdrop-blur-xl border-b border-gray-200/60 -mx-6 sm:-mx-10 px-6 sm:px-10 py-4 -mt-10 mb-8 sticky top-0 z-40">
       <div className="flex items-center gap-4 flex-wrap min-w-0">
-        <div className="text-lg font-bold text-white shrink-0">Slideshow Creator</div>
+        <div className="text-lg font-bold text-gray-900 shrink-0">Slideshow Creator</div>
         <nav className="flex items-center gap-4 flex-wrap">
           {link("/", "Home")}
           {link("/create", "Create")}
@@ -65,8 +65,8 @@ export default function AppHeader() {
               href="/admin"
               className={`text-sm transition-colors px-2 py-0.5 rounded ${
                 pathname === "/admin"
-                  ? "bg-amber-500/20 text-amber-300 font-medium"
-                  : "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+                  ? "bg-blue-50 text-blue-600 font-medium"
+                  : "bg-blue-50 text-blue-600 hover:bg-blue-100"
               }`}
             >
               Admin
@@ -76,13 +76,13 @@ export default function AppHeader() {
       </div>
       <div className="flex items-center gap-3 shrink-0">
         {me && (
-          <span className="text-xs text-zinc-500 hidden md:inline">
+          <span className="text-xs text-gray-500 hidden md:inline">
             {me.email}
           </span>
         )}
         <button
           onClick={logout}
-          className="text-sm text-zinc-500 hover:text-white transition-colors"
+          className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
         >
           Log out
         </button>
