@@ -1,65 +1,1304 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useCallback, useEffect, useMemo } from "react";
+import AppHeader from "@/components/AppHeader";
+
+interface TikTokAccount {
+  id: number;
+  username: string;
+}
+
+interface GeneratedSlideshow {
+  image: string | null;
+  texts: string[];
+}
+
+interface SavedItem {
+  name: string;
+  value: string;
+}
+
+interface TimeWindow {
+  start: string;
+  end: string;
+}
+
+interface AutomationConfig {
+  enabled: boolean;
+  windowStart: string; // UTC HH:MM (legacy)
+  windowEnd: string; // UTC HH:MM (legacy)
+  windowStart2?: string;
+  windowEnd2?: string;
+  postsPerDay?: number;
+  intervals?: TimeWindow[];
+  bookId?: string;
+  slideshowIds?: string[];
+  selections?: Array<{ bookId: string; slideshowId: string }>;
+}
+
+interface NamedItem {
+  id: string;
+  name: string;
+  value: string;
+}
+
+interface Slideshow {
+  id: string;
+  name: string;
+  slideTexts: string;
+  imagePromptIds: string[];
+  captionIds: string[];
+}
+
+interface Book {
+  id: string;
+  name: string;
+  imagePrompts: NamedItem[];
+  captions: NamedItem[];
+  slideshows: Slideshow[];
+}
+
+interface AccountData {
+  config: AutomationConfig;
+  prompts: SavedItem[];
+  texts: SavedItem[];
+  captions: SavedItem[];
+  lastRun?: string;
+  lastStatus?: string;
+}
+
+const LS = {
+  accountId: "sg.accountId",
+  // legacy localStorage keys for migration
+  savedPrompts: (id: number) => `sg.savedPrompts.${id}`,
+  savedTexts: (id: number) => `sg.savedTexts.${id}`,
+  savedCaptions: (id: number) => `sg.savedCaptions.${id}`,
+  draft: (id: number) => `sg.draft.${id}`,
+  migrated: (id: number) => `sg.migrated.${id}`,
+};
+
+const DEFAULT_CONFIG: AutomationConfig = {
+  enabled: false,
+  windowStart: "17:00",
+  windowEnd: "19:00",
+};
+
+// Convert UTC "HH:MM" to local "HH:MM" for display
+function utcToLocal(utc: string): string {
+  const [h, m] = utc.split(":").map(Number);
+  const d = new Date();
+  d.setUTCHours(h, m, 0, 0);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(
+    d.getMinutes()
+  ).padStart(2, "0")}`;
+}
+
+// Convert local "HH:MM" to UTC "HH:MM"
+function localToUtc(local: string): string {
+  const [h, m] = local.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(
+    d.getUTCMinutes()
+  ).padStart(2, "0")}`;
+}
+
+// TikTok resolution: 1080x1920 (9:16)
+const SLIDE_W = 1080;
+const SLIDE_H = 1920;
+
+function renderSlideToCanvas(
+  imageSrc: string | null,
+  text: string
+): Promise<HTMLCanvasElement> {
+  return new Promise((resolve) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = SLIDE_W;
+    canvas.height = SLIDE_H;
+    const ctx = canvas.getContext("2d")!;
+
+    function drawTextAndResolve() {
+      const grad = ctx.createLinearGradient(0, SLIDE_H, 0, 0);
+      grad.addColorStop(0, "rgba(0,0,0,0.85)");
+      grad.addColorStop(0.5, "rgba(0,0,0,0.2)");
+      grad.addColorStop(1, "rgba(0,0,0,0.4)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, SLIDE_W, SLIDE_H);
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      const fontSize = 72;
+      ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+      const maxWidth = SLIDE_W - 160;
+      const words = text.split(" ");
+      const lines: string[] = [];
+      let currentLine = "";
+
+      for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+
+      const lineHeight = fontSize * 1.35;
+      const totalHeight = lines.length * lineHeight;
+      const startY = (SLIDE_H - totalHeight) / 2 + lineHeight / 2;
+
+      // Black outline stroked underneath, then white fill on top.
+      // lineJoin "round" prevents spiky corners at large stroke widths.
+      ctx.strokeStyle = "black";
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.lineWidth = Math.round(fontSize * 0.18); // ≈13px at 72pt
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 12;
+
+      for (let i = 0; i < lines.length; i++) {
+        ctx.strokeText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
+      }
+
+      // Drop shadow only lives on the stroke pass so the white fill stays crisp.
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "white";
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
+      }
+
+      resolve(canvas);
+    }
+
+    if (imageSrc) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const scale = Math.max(SLIDE_W / img.width, SLIDE_H / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (SLIDE_W - w) / 2, (SLIDE_H - h) / 2, w, h);
+        drawTextAndResolve();
+      };
+      img.onerror = () => {
+        ctx.fillStyle = "#18181b";
+        ctx.fillRect(0, 0, SLIDE_W, SLIDE_H);
+        drawTextAndResolve();
+      };
+      img.src = imageSrc;
+    } else {
+      ctx.fillStyle = "#18181b";
+      ctx.fillRect(0, 0, SLIDE_W, SLIDE_H);
+      drawTextAndResolve();
+    }
+  });
+}
+
+type Step = 1 | 2 | 3;
 
 export default function Home() {
+  const [hydrated, setHydrated] = useState(false);
+
+  // Accounts
+  const [accounts, setAccounts] = useState<TikTokAccount[]>([]);
+  const [accountId, setAccountId] = useState<number | null>(null);
+
+  // Step 2 form
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [bulkText, setBulkText] = useState("");
+  const [caption, setCaption] = useState("");
+
+  // Saved per account
+  const [savedPrompts, setSavedPrompts] = useState<SavedItem[]>([]);
+  const [savedTexts, setSavedTexts] = useState<SavedItem[]>([]);
+  const [savedCaptions, setSavedCaptions] = useState<SavedItem[]>([]);
+  const [config, setConfig] = useState<AutomationConfig>(DEFAULT_CONFIG);
+  const [lastRun, setLastRun] = useState<string | undefined>();
+  const [lastStatus, setLastStatus] = useState<string | undefined>();
+  const [loadingAccount, setLoadingAccount] = useState(false);
+  // Books (global)
+  const [books, setBooks] = useState<Book[]>([]);
+  const [expandedBooks, setExpandedBooks] = useState<string[]>([]);
+
+  const fetchBooks = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/books`);
+      if (res.ok) {
+        const data = await res.json();
+        setBooks(data.books || []);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchBooks();
+  }, [fetchBooks]);
+
+  async function saveBooks(next: Book[]) {
+    setBooks(next);
+    try {
+      await fetch("/api/books", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ books: next }),
+      });
+    } catch {}
+  }
+
+  function loadSlideshowIntoEditor(s: Slideshow, book?: Book) {
+    // Prefer a prompt/caption the slideshow is explicitly linked to; otherwise
+    // fall back to the book's first one so legacy imported slideshows
+    // (which were saved with empty id arrays) still populate the editor.
+    const firstPrompt =
+      book?.imagePrompts.find((p) => s.imagePromptIds.includes(p.id)) ||
+      book?.imagePrompts[0];
+    const firstCaption =
+      book?.captions.find((c) => s.captionIds.includes(c.id)) ||
+      book?.captions[0];
+    setImagePrompt(firstPrompt?.value || "");
+    setBulkText(s.slideTexts);
+    setCaption(firstCaption?.value || "");
+  }
+
+  async function saveDraftToBook() {
+    if (!imagePrompt.trim() || !bulkText.trim()) {
+      window.alert("Need at least an image prompt and slide texts.");
+      return;
+    }
+    const uid = () =>
+      Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    let workingBooks = books;
+    let targetBookId: string;
+    if (books.length === 0) {
+      const bookName = window.prompt("No books yet. Name a new book:");
+      if (!bookName?.trim()) return;
+      targetBookId = uid();
+      workingBooks = [
+        ...workingBooks,
+        {
+          id: targetBookId,
+          name: bookName.trim(),
+          imagePrompts: [],
+          captions: [],
+          slideshows: [],
+        },
+      ];
+    } else {
+      const choice = window.prompt(
+        `Save to which book? Enter a number:\n${books
+          .map((b, i) => `${i + 1}. ${b.name}`)
+          .join("\n")}\n\nOr type a new book name.`
+      );
+      if (!choice?.trim()) return;
+      const asNum = Number(choice);
+      if (!isNaN(asNum) && asNum >= 1 && asNum <= books.length) {
+        targetBookId = books[asNum - 1].id;
+      } else {
+        targetBookId = uid();
+        workingBooks = [
+          ...workingBooks,
+          {
+            id: targetBookId,
+            name: choice.trim(),
+            imagePrompts: [],
+            captions: [],
+            slideshows: [],
+          },
+        ];
+      }
+    }
+    const slideshowName = window.prompt("Name this slideshow:");
+    if (!slideshowName?.trim()) return;
+
+    const promptItem: NamedItem = {
+      id: uid(),
+      name: `${slideshowName.trim()} prompt`,
+      value: imagePrompt,
+    };
+    const captionItem: NamedItem | null = caption.trim()
+      ? { id: uid(), name: `${slideshowName.trim()} caption`, value: caption }
+      : null;
+    const newSlideshow: Slideshow = {
+      id: uid(),
+      name: slideshowName.trim(),
+      slideTexts: bulkText,
+      imagePromptIds: [promptItem.id],
+      captionIds: captionItem ? [captionItem.id] : [],
+    };
+    const next = workingBooks.map((b) =>
+      b.id === targetBookId
+        ? {
+            ...b,
+            imagePrompts: [...b.imagePrompts, promptItem],
+            captions: captionItem ? [...b.captions, captionItem] : b.captions,
+            slideshows: [...b.slideshows, newSlideshow],
+          }
+        : b
+    );
+    await saveBooks(next);
+    window.alert(`Saved "${newSlideshow.name}" to book.`);
+  }
+
+  // Flow
+  const [step, setStep] = useState<Step>(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [slideshow, setSlideshow] = useState<GeneratedSlideshow | null>(null);
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  // Post state
+  const [posting, setPosting] = useState(false);
+  const [postStatus, setPostStatus] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  // Hydrate accountId on mount
+  useEffect(() => {
+    try {
+      const aid = localStorage.getItem(LS.accountId);
+      if (aid) setAccountId(Number(aid));
+    } catch {}
+    setHydrated(true);
+  }, []);
+
+  // Fetch accounts on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/post-tiktok`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setAccounts(data.accounts || []);
+      } catch {}
+    })();
+  }, []);
+
+  // Load per-account data from KV (with one-time localStorage migration)
+  useEffect(() => {
+    if (!hydrated || accountId == null) return;
+    localStorage.setItem(LS.accountId, String(accountId));
+    setLoadingAccount(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/account-data?accountId=${accountId}`);
+        if (!res.ok) throw new Error("Failed to load");
+        const { data } = (await res.json()) as { data: AccountData };
+
+        // Migrate legacy localStorage → KV once if KV is empty
+        const alreadyMigrated = localStorage.getItem(LS.migrated(accountId));
+        const kvEmpty =
+          !data.prompts.length && !data.texts.length && !data.captions.length;
+        if (!alreadyMigrated && kvEmpty) {
+          try {
+            const sp = localStorage.getItem(LS.savedPrompts(accountId));
+            const st = localStorage.getItem(LS.savedTexts(accountId));
+            const sc = localStorage.getItem(LS.savedCaptions(accountId));
+            const migrated: AccountData = {
+              config: data.config || DEFAULT_CONFIG,
+              prompts: sp ? JSON.parse(sp) : [],
+              texts: st ? JSON.parse(st) : [],
+              captions: sc ? JSON.parse(sc) : [],
+            };
+            if (
+              migrated.prompts.length ||
+              migrated.texts.length ||
+              migrated.captions.length
+            ) {
+              await fetch("/api/account-data", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  accountId,
+                  data: migrated,
+                }),
+              });
+              data.prompts = migrated.prompts;
+              data.texts = migrated.texts;
+              data.captions = migrated.captions;
+            }
+          } catch {}
+          localStorage.setItem(LS.migrated(accountId), "1");
+        }
+
+        setSavedPrompts(data.prompts || []);
+        setSavedTexts(data.texts || []);
+        setSavedCaptions(data.captions || []);
+        setConfig(data.config || DEFAULT_CONFIG);
+        setLastRun(data.lastRun);
+        setLastStatus(data.lastStatus);
+        // Initialize expanded books from existing selections
+        const existingSels = data.config?.selections || [];
+        setExpandedBooks([...new Set(existingSels.map((s: { bookId: string }) => s.bookId))]);
+
+        // Draft stays in localStorage (per-device, per-account)
+        const draft = localStorage.getItem(LS.draft(accountId));
+        if (draft) {
+          const d = JSON.parse(draft);
+          setImagePrompt(d.imagePrompt || "");
+          setBulkText(d.bulkText || "");
+          setCaption(d.caption || "");
+        } else {
+          setImagePrompt("");
+          setBulkText("");
+          setCaption("");
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingAccount(false);
+      }
+    })();
+  }, [accountId, hydrated]);
+
+  // Persist draft per account (local only)
+  useEffect(() => {
+    if (!hydrated || accountId == null) return;
+    localStorage.setItem(
+      LS.draft(accountId),
+      JSON.stringify({ imagePrompt, bulkText, caption })
+    );
+  }, [imagePrompt, bulkText, caption, accountId, hydrated]);
+
+  // Debounced KV save whenever saved items or config change
+  useEffect(() => {
+    if (!hydrated || accountId == null || loadingAccount) return;
+    const t = setTimeout(() => {
+      fetch("/api/account-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId,
+          data: {
+            config,
+            prompts: savedPrompts,
+            texts: savedTexts,
+            captions: savedCaptions,
+            lastRun,
+            lastStatus,
+          },
+        }),
+      }).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [
+    savedPrompts,
+    savedTexts,
+    savedCaptions,
+    config,
+    accountId,
+    hydrated,
+    loadingAccount,
+    lastRun,
+    lastStatus,
+  ]);
+
+  const selectedAccount = useMemo(
+    () => accounts.find((a) => a.id === accountId) || null,
+    [accounts, accountId]
+  );
+
+  const slideCount = bulkText.split("\n").filter((t) => t.trim()).length;
+
+  function saveCurrentPrompt() {
+    if (!imagePrompt.trim()) return;
+    const name = window.prompt("Name this image prompt:");
+    if (!name?.trim()) return;
+    setSavedPrompts((prev) => [
+      ...prev.filter((p) => p.name !== name),
+      { name: name.trim(), value: imagePrompt },
+    ]);
+  }
+
+  function saveCurrentTexts() {
+    if (!bulkText.trim()) return;
+    const name = window.prompt("Name this slide text set:");
+    if (!name?.trim()) return;
+    setSavedTexts((prev) => [
+      ...prev.filter((p) => p.name !== name),
+      { name: name.trim(), value: bulkText },
+    ]);
+  }
+
+  function saveCurrentCaption() {
+    if (!caption.trim()) return;
+    const name = window.prompt("Name this caption:");
+    if (!name?.trim()) return;
+    setSavedCaptions((prev) => [
+      ...prev.filter((p) => p.name !== name),
+      { name: name.trim(), value: caption },
+    ]);
+  }
+
+  async function generate() {
+    const validTexts = bulkText.split("\n").filter((t) => t.trim());
+    if (validTexts.length === 0 || !imagePrompt.trim()) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagePrompt, texts: validTexts }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Generation failed");
+      }
+
+      const data = await res.json();
+      setSlideshow(data);
+      setCurrentSlide(0);
+      setStep(3);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const postToTikTok = useCallback(async () => {
+    if (!slideshow || accountId == null) return;
+    if (slideshow.texts.length < 2) {
+      setPostStatus("TikTok carousels need at least 2 slides");
+      return;
+    }
+    setPosting(true);
+    setPostStatus(null);
+    try {
+      const mediaIds: string[] = [];
+      for (let i = 0; i < slideshow.texts.length; i++) {
+        setPostStatus(`Uploading slide ${i + 1} of ${slideshow.texts.length}...`);
+        const canvas = await renderSlideToCanvas(slideshow.image, slideshow.texts[i]);
+        const dataUrl = canvas.toDataURL("image/png");
+
+        const res = await fetch("/api/post-tiktok?action=upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: dataUrl, index: i }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Upload ${i + 1} failed`);
+        mediaIds.push(data.media_id);
+      }
+
+      setPostStatus("Publishing...");
+      const pubRes = await fetch("/api/post-tiktok?action=publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caption,
+          mediaIds,
+          accountIds: [accountId],
+        }),
+      });
+      const pubData = await pubRes.json();
+      if (!pubRes.ok) throw new Error(pubData.error || "Publish failed");
+
+      setPostStatus(`Posted to @${selectedAccount?.username}!`);
+    } catch (err) {
+      setPostStatus(err instanceof Error ? err.message : "Posting failed");
+    } finally {
+      setPosting(false);
+    }
+  }, [slideshow, caption, accountId, selectedAccount]);
+
+  const downloadAll = useCallback(async () => {
+    if (!slideshow) return;
+    setDownloading(true);
+    for (let i = 0; i < slideshow.texts.length; i++) {
+      const canvas = await renderSlideToCanvas(slideshow.image, slideshow.texts[i]);
+      const link = document.createElement("a");
+      link.download = `slide-${i + 1}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    setDownloading(false);
+  }, [slideshow]);
+
+  // ============ SHELL ============
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-white">
+      <div className="mx-auto w-full max-w-3xl px-6 sm:px-10 py-10">
+        <AppHeader />
+        <p className="text-sm text-zinc-500 mb-6 -mt-4">
+          {selectedAccount
+            ? `Working as @${selectedAccount.username}`
+            : "Choose an account to begin"}
+        </p>
+
+        {/* Stepper */}
+        <div className="flex items-center gap-2 mb-10">
+          {[1, 2, 3].map((n) => {
+            const active = step === n;
+            const done = step > n;
+            return (
+              <div key={n} className="flex-1 flex items-center gap-2">
+                <div
+                  className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold border transition-colors ${
+                    active
+                      ? "bg-white text-black border-white"
+                      : done
+                      ? "bg-zinc-800 text-white border-zinc-700"
+                      : "bg-transparent text-zinc-600 border-zinc-800"
+                  }`}
+                >
+                  {done ? "✓" : n}
+                </div>
+                <div className="text-xs text-zinc-500 hidden sm:block">
+                  {n === 1 ? "Account" : n === 2 ? "Content" : "Slides"}
+                </div>
+                {n < 3 && <div className="flex-1 h-px bg-zinc-800" />}
+              </div>
+            );
+          })}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        {/* ============ STEP 1: Account ============ */}
+        {step === 1 && (
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8">
+            <h2 className="text-lg font-semibold mb-1">Choose TikTok account</h2>
+            <p className="text-sm text-zinc-500 mb-6">
+              Your prompts and slide texts are saved separately per account.
+            </p>
+
+            {accounts.length === 0 ? (
+              <p className="text-sm text-zinc-500">Loading accounts…</p>
+            ) : (
+              <>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Account
+                </label>
+                <select
+                  value={accountId ?? ""}
+                  onChange={(e) =>
+                    setAccountId(e.target.value ? Number(e.target.value) : null)
+                  }
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20 mb-6"
+                >
+                  <option value="">Select an account…</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      @{a.username}
+                    </option>
+                  ))}
+                </select>
+
+                {accountId != null && !loadingAccount && (
+                  <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <div className="text-sm font-medium text-white">
+                          Automate daily posts
+                        </div>
+                        <div className="text-xs text-zinc-500 mt-0.5">
+                          Picks a random prompt, text set & caption from this
+                          account&apos;s saved items.
+                        </div>
+                      </div>
+                      <button
+                        onClick={() =>
+                          setConfig({ ...config, enabled: !config.enabled })
+                        }
+                        className={`relative w-11 h-6 rounded-full transition-colors ${
+                          config.enabled ? "bg-green-500" : "bg-zinc-700"
+                        }`}
+                        aria-label="Toggle automation"
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                            config.enabled ? "translate-x-5" : ""
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {config.enabled && (
+                      <>
+                        <div className="mb-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs text-zinc-500">
+                              Posting intervals (1 post per interval)
+                            </label>
+                            <button
+                              onClick={() => {
+                                const intervals = [
+                                  ...(config.intervals || []),
+                                  { start: "18:00", end: "20:00" },
+                                ];
+                                setConfig({ ...config, intervals });
+                              }}
+                              className="text-xs text-zinc-400 hover:text-white transition-colors"
+                            >
+                              + Add interval
+                            </button>
+                          </div>
+                          {(config.intervals && config.intervals.length > 0
+                            ? config.intervals
+                            : [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]
+                          ).map((win, idx) => (
+                            <div
+                              key={idx}
+                              className="grid grid-cols-[1fr_1fr_auto] gap-2 mb-2 items-end"
+                            >
+                              <div>
+                                <label className="block text-xs text-zinc-500 mb-1">
+                                  From
+                                </label>
+                                <input
+                                  type="time"
+                                  value={utcToLocal(win.start)}
+                                  onChange={(e) => {
+                                    const intervals = [
+                                      ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
+                                    ];
+                                    intervals[idx] = {
+                                      ...intervals[idx],
+                                      start: localToUtc(e.target.value),
+                                    };
+                                    setConfig({ ...config, intervals });
+                                  }}
+                                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-zinc-500 mb-1">
+                                  To
+                                </label>
+                                <input
+                                  type="time"
+                                  value={utcToLocal(win.end)}
+                                  onChange={(e) => {
+                                    const intervals = [
+                                      ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
+                                    ];
+                                    intervals[idx] = {
+                                      ...intervals[idx],
+                                      end: localToUtc(e.target.value),
+                                    };
+                                    setConfig({ ...config, intervals });
+                                  }}
+                                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+                                />
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const intervals = [
+                                    ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
+                                  ];
+                                  if (intervals.length <= 1) return;
+                                  intervals.splice(idx, 1);
+                                  setConfig({ ...config, intervals });
+                                }}
+                                className="pb-2 text-zinc-600 hover:text-red-400 transition-colors text-sm"
+                                title="Remove interval"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                          <p className="text-xs text-zinc-600 mt-1">
+                            Each interval schedules 1 post at a random time within it.
+                          </p>
+                        </div>
+                        {lastRun && (
+                          <p className="text-xs text-zinc-600 mt-2">
+                            Last run: {new Date(lastRun).toLocaleString()} —{" "}
+                            {lastStatus}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {accountId != null && config.enabled && (
+                  <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 p-5">
+                    <div className="text-sm font-medium text-white mb-3">
+                      Source book & slideshows
+                    </div>
+                    {books.length === 0 ? (
+                      <p className="text-xs text-zinc-500">
+                        No books yet. Create one on the{" "}
+                        <a href="/books" className="underline hover:text-white">
+                          Books
+                        </a>{" "}
+                        page first.
+                      </p>
+                    ) : (() => {
+                      const sels = config.selections || [];
+                      const selectedBooks = books.filter((b) =>
+                        expandedBooks.includes(b.id)
+                      );
+                      return (
+                        <>
+                          <label className="text-xs text-zinc-500 mb-1 block">
+                            Books
+                          </label>
+                          <div className="space-y-1 max-h-40 overflow-y-auto mb-4">
+                            {books.map((b) => {
+                              const bookSelected = expandedBooks.includes(b.id);
+                              return (
+                                <label
+                                  key={b.id}
+                                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-900 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={bookSelected}
+                                    onChange={() => {
+                                      if (bookSelected) {
+                                        setConfig({
+                                          ...config,
+                                          selections: sels.filter(
+                                            (s) => s.bookId !== b.id
+                                          ),
+                                        });
+                                        setExpandedBooks((prev) =>
+                                          prev.filter((id) => id !== b.id)
+                                        );
+                                      } else {
+                                        setExpandedBooks((prev) => [...prev, b.id]);
+                                      }
+                                    }}
+                                    className="accent-white"
+                                  />
+                                  <span className="text-sm text-zinc-300">
+                                    {b.name}
+                                  </span>
+                                  <span className="text-xs text-zinc-600 ml-auto">
+                                    {b.slideshows.length} slideshows
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+
+                          {selectedBooks.length > 0 && (
+                            <>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-xs text-zinc-500">
+                                  Slideshows
+                                </label>
+                                <div className="flex gap-3 text-xs">
+                                  <button
+                                    onClick={() => {
+                                      const all: Array<{
+                                        bookId: string;
+                                        slideshowId: string;
+                                      }> = [];
+                                      selectedBooks.forEach((b) =>
+                                        b.slideshows.forEach((s) =>
+                                          all.push({
+                                            bookId: b.id,
+                                            slideshowId: s.id,
+                                          })
+                                        )
+                                      );
+                                      setConfig({
+                                        ...config,
+                                        selections: all,
+                                      });
+                                    }}
+                                    className="text-zinc-500 hover:text-white transition-colors"
+                                  >
+                                    All
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setConfig({
+                                        ...config,
+                                        selections: [],
+                                      });
+                                    }}
+                                    className="text-zinc-500 hover:text-white transition-colors"
+                                  >
+                                    None
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="space-y-1 max-h-48 overflow-y-auto">
+                                {selectedBooks.map((b) => (
+                                  <div key={b.id}>
+                                    <div className="text-xs font-medium text-zinc-400 px-2 pt-2 pb-1">
+                                      {b.name}
+                                    </div>
+                                    {b.slideshows.map((s) => {
+                                      const checked = sels.some(
+                                        (sel) =>
+                                          sel.bookId === b.id &&
+                                          sel.slideshowId === s.id
+                                      );
+                                      return (
+                                        <label
+                                          key={s.id}
+                                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-900 cursor-pointer"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => {
+                                              setConfig({
+                                                ...config,
+                                                selections: checked
+                                                  ? sels.filter(
+                                                      (sel) =>
+                                                        !(
+                                                          sel.bookId === b.id &&
+                                                          sel.slideshowId ===
+                                                            s.id
+                                                        )
+                                                    )
+                                                  : [
+                                                      ...sels,
+                                                      {
+                                                        bookId: b.id,
+                                                        slideshowId: s.id,
+                                                      },
+                                                    ],
+                                              });
+                                            }}
+                                            className="accent-white"
+                                          />
+                                          <span className="text-sm text-zinc-300">
+                                            {s.name}
+                                          </span>
+                                          <span className="text-xs text-zinc-600 ml-auto">
+                                            {
+                                              s.slideTexts
+                                                .split("\n")
+                                                .filter((t) => t.trim()).length
+                                            }{" "}
+                                            slides
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          <p className="text-xs text-zinc-600 mt-2">
+                            Pick books first, then choose which slideshows to
+                            include. Cron picks randomly across all selected.
+                          </p>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setStep(2)}
+                  disabled={accountId == null}
+                  className="w-full px-6 py-3 rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+                >
+                  Continue
+                </button>
+              </>
+            )}
+          </section>
+        )}
+
+        {/* ============ STEP 2: Content ============ */}
+        {step === 2 && (
+          <section className="space-y-6">
+            {/* Library actions */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 flex flex-wrap items-center gap-3">
+              <div className="text-sm text-zinc-400 mr-auto">
+                Library:
+              </div>
+              <select
+                value=""
+                onChange={(e) => {
+                  const [bookId, slideshowId] = e.target.value.split("::");
+                  const b = books.find((x) => x.id === bookId);
+                  const s = b?.slideshows.find((x) => x.id === slideshowId);
+                  if (s && b) loadSlideshowIntoEditor(s, b);
+                }}
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/20"
+              >
+                <option value="">Load from book…</option>
+                {books.map((b) => (
+                  <optgroup key={b.id} label={b.name}>
+                    {b.slideshows.map((s) => (
+                      <option key={s.id} value={`${b.id}::${s.id}`}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <button
+                onClick={saveDraftToBook}
+                className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-200 hover:bg-zinc-800 transition-colors text-sm font-medium"
+              >
+                Save to book
+              </button>
+            </div>
+
+            {/* Image prompt */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Background image prompt
+              </label>
+              <textarea
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                placeholder="Describe the background image for all slides..."
+                rows={3}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 resize-none"
+              />
+            </div>
+
+            {/* Slide texts */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Slide texts
+              </label>
+              <p className="text-xs text-zinc-500 mb-3">
+                One slide per line. Empty lines are ignored.
+              </p>
+              <textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder={"First slide text\nSecond slide text\nThird slide text"}
+                rows={8}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20"
+              />
+              <p className="text-xs text-zinc-600 mt-2">
+                {slideCount} slide{slideCount !== 1 ? "s" : ""}
+              </p>
+            </div>
+
+            {/* Caption */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                TikTok caption
+              </label>
+              <textarea
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Caption that appears on the TikTok post..."
+                rows={3}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 resize-none"
+              />
+            </div>
+
+            {error && (
+              <div className="p-4 rounded-lg bg-red-950/50 border border-red-900/50 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep(1)}
+                className="px-5 py-3 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm font-medium"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={generate}
+                disabled={loading || !imagePrompt.trim() || slideCount === 0}
+                className="flex-1 px-6 py-3 rounded-lg bg-white text-black font-semibold hover:bg-zinc-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <span
+                      className="inline-block w-4 h-4 border-2 border-black/20 border-t-black rounded-full"
+                      style={{ animation: "spin 0.6s linear infinite" }}
+                    />
+                    Generating…
+                  </>
+                ) : (
+                  "Generate slideshow"
+                )}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ============ STEP 3: Slides ============ */}
+        {step === 3 && slideshow && (
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8">
+            <div className="flex flex-col items-center">
+              {/* Slide frame — responsive, fits viewport */}
+              <div
+                className="relative rounded-2xl overflow-hidden shadow-2xl bg-zinc-950"
+                style={{
+                  width: "min(100%, 320px)",
+                  aspectRatio: "9 / 16",
+                  maxHeight: "60vh",
+                }}
+              >
+                {slideshow.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={slideshow.image}
+                    alt={imagePrompt}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "linear-gradient(to bottom, #27272a, #18181b)",
+                    }}
+                  />
+                )}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background:
+                      "linear-gradient(to top, rgba(0,0,0,0.85) 15%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.4) 100%)",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "1.5rem",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "1.4rem",
+                      fontWeight: 700,
+                      lineHeight: 1.3,
+                      color: "white",
+                      textShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                      textAlign: "center",
+                    }}
+                  >
+                    {slideshow.texts[currentSlide]}
+                  </p>
+                </div>
+              </div>
+
+              {/* Prev / counter / Next */}
+              <div className="flex items-center gap-4 mt-5">
+                <button
+                  onClick={() => setCurrentSlide((i) => Math.max(0, i - 1))}
+                  disabled={currentSlide === 0}
+                  className="w-10 h-10 rounded-full border border-zinc-700 text-white disabled:text-zinc-700 disabled:border-zinc-800 hover:bg-zinc-800 transition-colors"
+                >
+                  ‹
+                </button>
+                <div className="text-sm text-zinc-400 tabular-nums">
+                  {currentSlide + 1} / {slideshow.texts.length}
+                </div>
+                <button
+                  onClick={() =>
+                    setCurrentSlide((i) =>
+                      Math.min(slideshow.texts.length - 1, i + 1)
+                    )
+                  }
+                  disabled={currentSlide === slideshow.texts.length - 1}
+                  className="w-10 h-10 rounded-full border border-zinc-700 text-white disabled:text-zinc-700 disabled:border-zinc-800 hover:bg-zinc-800 transition-colors"
+                >
+                  ›
+                </button>
+              </div>
+
+              {/* Dots */}
+              <div className="flex gap-2 mt-4">
+                {slideshow.texts.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCurrentSlide(i)}
+                    style={{
+                      width: i === currentSlide ? 24 : 8,
+                      height: 8,
+                      borderRadius: 4,
+                      border: "none",
+                      background:
+                        i === currentSlide ? "white" : "rgba(255,255,255,0.25)",
+                      cursor: "pointer",
+                      transition: "all 0.3s",
+                    }}
+                  />
+                ))}
+              </div>
+
+              {postStatus && (
+                <div
+                  className={`mt-5 text-sm ${
+                    postStatus.includes("Posted") ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {postStatus}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="mt-6 flex flex-wrap justify-center gap-3 w-full">
+                <button
+                  onClick={() => {
+                    setSlideshow(null);
+                    setPostStatus(null);
+                    setCurrentSlide(0);
+                    setStep(1);
+                  }}
+                  className="px-5 py-2.5 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm font-medium"
+                >
+                  ⌂ Home
+                </button>
+                <button
+                  onClick={() => setStep(2)}
+                  className="px-5 py-2.5 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors text-sm font-medium"
+                >
+                  ← Edit
+                </button>
+                <button
+                  onClick={downloadAll}
+                  disabled={downloading}
+                  className="px-5 py-2.5 rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  {downloading ? "Downloading…" : "Download all"}
+                </button>
+                <button
+                  onClick={postToTikTok}
+                  disabled={posting}
+                  className="px-5 py-2.5 rounded-lg text-white font-semibold text-sm disabled:opacity-50"
+                  style={{
+                    background: "linear-gradient(135deg, #ff0050, #00f2ea)",
+                  }}
+                >
+                  {posting
+                    ? "Posting…"
+                    : `Post to @${selectedAccount?.username ?? ""}`}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      `}</style>
     </div>
   );
 }

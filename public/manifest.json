@@ -1,0 +1,17 @@
+{
+  "name": "BookPulls",
+  "short_name": "BookPulls",
+  "description": "AI-powered book promo slideshow creator",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbfbfd",
+  "theme_color": "#fbfbfd",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
