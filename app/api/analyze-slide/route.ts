@@ -8,15 +8,55 @@ export async function POST(req: NextRequest) {
   const { error } = await requireSession(req);
   if (error) return error;
 
-  const { imageData } = (await req.json()) as { imageData: string };
-  if (!imageData) {
-    return NextResponse.json({ error: "imageData required" }, { status: 400 });
-  }
+  const { imageData, imageUrl } = (await req.json()) as {
+    imageData?: string;
+    imageUrl?: string;
+  };
 
-  const b64 = imageData.includes(",") ? imageData.split(",")[1] : imageData;
-  const mimeType = imageData.startsWith("data:image/png")
-    ? "image/png"
-    : "image/jpeg";
+  let b64: string;
+  let mimeType: string;
+
+  if (imageUrl) {
+    try {
+      const imgRes = await fetch(imageUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+          Accept: "image/*",
+        },
+        redirect: "follow",
+      });
+      if (!imgRes.ok) {
+        return NextResponse.json(
+          { error: `Failed to fetch image: ${imgRes.status}` },
+          { status: 400 }
+        );
+      }
+      const ct = imgRes.headers.get("content-type") || "";
+      if (!ct.startsWith("image/")) {
+        return NextResponse.json(
+          { error: "URL did not return an image" },
+          { status: 400 }
+        );
+      }
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      b64 = buf.toString("base64");
+      mimeType = ct.split(";")[0];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+  } else if (imageData) {
+    b64 = imageData.includes(",") ? imageData.split(",")[1] : imageData;
+    mimeType = imageData.startsWith("data:image/png")
+      ? "image/png"
+      : "image/jpeg";
+  } else {
+    return NextResponse.json(
+      { error: "imageData or imageUrl required" },
+      { status: 400 }
+    );
+  }
 
   try {
     const response = await ai.models.generateContent({
