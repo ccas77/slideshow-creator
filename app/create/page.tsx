@@ -185,7 +185,7 @@ export default function CreatePage() {
             <input
               value={bookTag}
               onChange={(e) => setBookTag(e.target.value)}
-              placeholder='e.g. 📚 Snaring Emberly by Gigi Styx'
+              placeholder='e.g. 📚 Book Title by Author Name'
               className="input-field"
             />
           </Field>
@@ -205,7 +205,7 @@ export default function CreatePage() {
               <input
                 value={hook}
                 onChange={(e) => setHook(e.target.value)}
-                placeholder="e.g. she accidentally summons a tentacle monster"
+                placeholder="e.g. she discovers a hidden letter"
                 className="input-field"
               />
             </Field>
@@ -213,7 +213,7 @@ export default function CreatePage() {
               <input
                 value={twist}
                 onChange={(e) => setTwist(e.target.value)}
-                placeholder="e.g. he wants to take her to his dimension"
+                placeholder="e.g. the letter is from someone she thought was dead"
                 className="input-field"
               />
             </Field>
@@ -223,7 +223,7 @@ export default function CreatePage() {
             <input
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              placeholder="e.g. tentacle monster, rose toy, dimension"
+              placeholder="e.g. mystery, betrayal, secret identity"
               className="input-field"
             />
           </Field>
