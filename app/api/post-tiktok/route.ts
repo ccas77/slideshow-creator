@@ -40,14 +40,11 @@ export async function GET(req: NextRequest) {
     const settings = await getAppSettings(session.userId);
     const allowedIds = settings.allowedAccountIds;
     const isAdmin = session.role === "admin";
-    // For the *account list*, admins see everything; regular users are
-    // filtered by their admin-granted allow-list.
-    const filterAccounts =
-      !isAdmin && !!(allowedIds && allowedIds.length > 0);
-    // For *posts*, everyone is filtered by their allowed accounts (or by
-    // the explicit accountId param). Admins still get scoped to whichever
-    // account they're viewing — showing every account's posts is noisy.
-    const filterPosts = !!(allowedIds && allowedIds.length > 0);
+    // Admins see everything. Non-admins are ALWAYS filtered: if they have
+    // an allow-list, show only those accounts; if they have NO allow-list
+    // (new user), show nothing — not everything.
+    const filterAccounts = !isAdmin;
+    const filterPosts = !isAdmin;
 
     if (action === "posts") {
       const accountId = url.searchParams.get("accountId");
@@ -75,21 +72,26 @@ export async function GET(req: NextRequest) {
         social_accounts: number[];
         media: string[];
       }>;
-      // Scope posts: if accountId param is given use that, otherwise
-      // fall back to the user's allow-list. Admins without an allow-list
-      // AND no accountId param see nothing rather than every post.
+      // Non-admins can only see posts for their allowed accounts.
+      // Even with an explicit accountId param, enforce the allow-list.
+      const safeIds = allowedIds || [];
       let visible = all;
-      if (accountId) {
+      if (filterPosts) {
+        // First restrict to allowed accounts only
+        visible = all.filter((p) =>
+          p.social_accounts.some((id) => safeIds.includes(id))
+        );
+        // Then narrow by accountId param if given
+        if (accountId) {
+          visible = visible.filter((p) =>
+            p.social_accounts.includes(Number(accountId))
+          );
+        }
+      } else if (accountId) {
+        // Admin with accountId filter
         visible = all.filter((p) =>
           p.social_accounts.includes(Number(accountId))
         );
-      } else if (filterPosts) {
-        visible = all.filter((p) =>
-          p.social_accounts.some((id) => allowedIds!.includes(id))
-        );
-      } else {
-        // No accountId selected and no allow-list → return empty
-        visible = [];
       }
       const posts = visible.map((p) => ({
         id: p.id,
@@ -113,7 +115,7 @@ export async function GET(req: NextRequest) {
       })
     );
     const accounts = filterAccounts
-      ? all.filter((a: { id: number }) => allowedIds!.includes(a.id))
+      ? all.filter((a: { id: number }) => (allowedIds || []).includes(a.id))
       : all;
     return NextResponse.json({ accounts });
   } catch (err: unknown) {
@@ -206,10 +208,16 @@ export async function POST(req: NextRequest) {
       }
 
       // Enforce that the user can only post to accounts they're allowed to see.
-      // Admins bypass this check.
+      // Admins bypass this check. Non-admins with NO allow-list can't post at all.
       const settings = await getAppSettings(session.userId);
-      const allowedIds = settings.allowedAccountIds;
-      if (session.role !== "admin" && allowedIds && allowedIds.length > 0) {
+      const allowedIds = settings.allowedAccountIds || [];
+      if (session.role !== "admin") {
+        if (allowedIds.length === 0) {
+          return NextResponse.json(
+            { error: "No accounts assigned. Ask an admin to grant access." },
+            { status: 403 }
+          );
+        }
         const disallowed = accountIds.filter(
           (id) => !allowedIds.includes(id)
         );
