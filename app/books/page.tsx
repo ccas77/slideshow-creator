@@ -48,6 +48,7 @@ export default function BooksPage() {
   const [showImport, setShowImport] = useState(false);
   const [importName, setImportName] = useState("");
   const [importText, setImportText] = useState("");
+  const [analyzingSlide, setAnalyzingSlide] = useState(false);
 
   const loadBooks = useCallback(async () => {
     setLoading(true);
@@ -114,6 +115,44 @@ export default function BooksPage() {
     if (!window.confirm("Delete this book and everything in it?")) return;
     persist(books.filter((x) => x.id !== id));
     if (activeBookId === id) setActiveBookId(null);
+  }
+
+  function analyzeSlide() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file || !activeBookId) return;
+      setAnalyzingSlide(true);
+      try {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        const res = await fetch("/api/analyze-slide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageData: dataUrl }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed");
+        const newItem: NamedItem = {
+          id: uid(),
+          name: file.name.replace(/\.[^.]+$/, ""),
+          value: data.prompt,
+        };
+        setEditingItem({ kind: "prompts", item: newItem });
+      } catch (err) {
+        window.alert(
+          err instanceof Error ? err.message : "Failed to analyze slide"
+        );
+      } finally {
+        setAnalyzingSlide(false);
+      }
+    };
+    input.click();
   }
 
   const activeBook = books.find((b) => b.id === activeBookId);
@@ -234,35 +273,41 @@ export default function BooksPage() {
                   </div>
 
                   {tab === "prompts" && (
-                    <PoolTab
-                      kind="prompts"
-                      items={activeBook.imagePrompts}
-                      onAdd={() =>
-                        setEditingItem({
-                          kind: "prompts",
-                          item: { id: uid(), name: "", value: "" },
-                        })
-                      }
-                      onEdit={(item) =>
-                        setEditingItem({ kind: "prompts", item })
-                      }
-                      onDelete={(id) => {
-                        if (!window.confirm("Delete this image prompt?"))
-                          return;
-                        updateBook(activeBook.id, (b) => ({
-                          ...b,
-                          imagePrompts: b.imagePrompts.filter(
-                            (x) => x.id !== id
-                          ),
-                          slideshows: b.slideshows.map((s) => ({
-                            ...s,
-                            imagePromptIds: s.imagePromptIds.filter(
-                              (x) => x !== id
+                    <>
+                      {analyzingSlide && (
+                        <div className="text-sm text-blue-500 mb-3">Analyzing slide…</div>
+                      )}
+                      <PoolTab
+                        kind="prompts"
+                        items={activeBook.imagePrompts}
+                        onAdd={() =>
+                          setEditingItem({
+                            kind: "prompts",
+                            item: { id: uid(), name: "", value: "" },
+                          })
+                        }
+                        onEdit={(item) =>
+                          setEditingItem({ kind: "prompts", item })
+                        }
+                        onDelete={(id) => {
+                          if (!window.confirm("Delete this image prompt?"))
+                            return;
+                          updateBook(activeBook.id, (b) => ({
+                            ...b,
+                            imagePrompts: b.imagePrompts.filter(
+                              (x) => x.id !== id
                             ),
-                          })),
-                        }));
-                      }}
-                    />
+                            slideshows: b.slideshows.map((s) => ({
+                              ...s,
+                              imagePromptIds: s.imagePromptIds.filter(
+                                (x) => x !== id
+                              ),
+                            })),
+                          }));
+                        }}
+                        onAnalyzeSlide={analyzeSlide}
+                      />
+                    </>
                   )}
 
                   {tab === "captions" && (
@@ -605,12 +650,14 @@ function PoolTab({
   onAdd,
   onEdit,
   onDelete,
+  onAnalyzeSlide,
 }: {
   kind: "prompts" | "captions";
   items: NamedItem[];
   onAdd: () => void;
   onEdit: (item: NamedItem) => void;
   onDelete: (id: string) => void;
+  onAnalyzeSlide?: () => void;
 }) {
   return (
     <div>
@@ -643,12 +690,22 @@ function PoolTab({
           </div>
         ))}
       </div>
-      <button
-        onClick={onAdd}
-        className="w-full px-5 py-3 rounded-xl border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors text-sm font-medium"
-      >
-        + Add {kind === "prompts" ? "image prompt" : "caption"}
-      </button>
+      <div className="flex gap-3">
+        <button
+          onClick={onAdd}
+          className="flex-1 px-5 py-3 rounded-xl border border-dashed border-gray-300 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors text-sm font-medium"
+        >
+          + Add {kind === "prompts" ? "image prompt" : "caption"}
+        </button>
+        {onAnalyzeSlide && (
+          <button
+            onClick={onAnalyzeSlide}
+            className="flex-1 px-5 py-3 rounded-xl border border-dashed border-blue-300 text-blue-500 hover:text-blue-600 hover:border-blue-400 transition-colors text-sm font-medium"
+          >
+            Analyze a slide
+          </button>
+        )}
+      </div>
     </div>
   );
 }
