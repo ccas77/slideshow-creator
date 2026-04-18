@@ -278,6 +278,42 @@ export async function setTopNLists(
   await redis.set(topNListsKey(userId), lists);
 }
 
+// ── Instagram Slideshows (per-user) ──
+
+export interface InstagramAutomation {
+  enabled: boolean;
+  igAccountIds: number[];       // Instagram accounts to post carousel to
+  tiktokAccountIds: number[];   // TikTok accounts to post video to
+  intervals: TimeWindow[];
+}
+
+export interface InstagramSlideshow {
+  id: string;
+  name: string;
+  sourceBookId?: string;        // which book it was imported from
+  sourceSlideshowId?: string;   // which TikTok slideshow it was chopped from
+  slideTexts: string;           // newline-separated (max 10)
+  imagePromptIds: string[];
+  captionIds: string[];
+  imagePrompts: NamedItem[];    // local copy of prompts
+  captions: NamedItem[];        // local copy of captions
+  automation?: InstagramAutomation;
+}
+
+const igSlideshowsKey = (userId: string) => `u:${userId}:ig-slideshows`;
+
+export async function getIgSlideshows(userId: string): Promise<InstagramSlideshow[]> {
+  const data = await redis.get<InstagramSlideshow[]>(igSlideshowsKey(userId));
+  return data ?? [];
+}
+
+export async function setIgSlideshows(
+  userId: string,
+  slideshows: InstagramSlideshow[]
+): Promise<void> {
+  await redis.set(igSlideshowsKey(userId), slideshows);
+}
+
 // ── Settings (per-user) ──
 
 const settingsKey = (userId: string) => `u:${userId}:app-settings`;

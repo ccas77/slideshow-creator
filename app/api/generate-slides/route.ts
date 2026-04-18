@@ -132,7 +132,20 @@ export async function POST(req: NextRequest) {
   let system: string;
   let userMessage: string;
 
-  if (action === "tighten") {
+  if (action === "truncate") {
+    system = `You are a slideshow editor for book promos. Your job is to select the BEST slides from a longer TikTok slideshow to create a shorter Instagram carousel (maximum 10 slides).
+
+RULES:
+- Select at most 10 slides from the input
+- ALWAYS keep: slide one (the hook), the final twist slide, and the book tag (last line)
+- From the remaining slides, pick the ones with the most tension, dialogue, WTF moments, and reader reactions
+- Cut backstory, transitions, and setup slides first
+- The selected slides must still tell a coherent, compelling story
+- DO NOT rewrite, edit, or change any slide text. Return them EXACTLY as written
+- Return ONLY the selected slides, one per line, in their original order
+- No blank lines, no numbering, no commentary`;
+    userMessage = `Select the best slides (maximum 10) from this TikTok slideshow for an Instagram carousel. Keep the hook, twist, and book tag. Pick the most engaging slides in between.\n\n${slides}`;
+  } else if (action === "tighten") {
     system = EDITOR;
     userMessage = `Cut the backstory and transition filler from these slides. Keep all dialogue, emojis, reader reactions, WTF moments, and juicy details exactly as written. Do not rewrite anything.\n\n${slides}`;
   } else {

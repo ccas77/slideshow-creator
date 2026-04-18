@@ -105,8 +105,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ posts });
     }
 
+    const platform = url.searchParams.get("platform") || "tiktok";
     const accountsResp = await pbFetch(
-      "/v1/social-accounts?platform=tiktok&limit=100"
+      `/v1/social-accounts?platform=${platform}&limit=100`
     );
     const all = (accountsResp.data || []).map(
       (a: { id: number; username: string }) => ({

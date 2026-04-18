@@ -58,6 +58,7 @@ export default function AppHeader() {
           {link("/", "Home")}
           {link("/create", "Create")}
           {link("/books", "Books")}
+          {link("/instagram", "Instagram")}
           {link("/top-books", "Top Books")}
           {link("/posts", "Posts")}
           {me?.role === "admin" && (
