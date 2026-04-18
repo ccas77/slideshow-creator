@@ -150,24 +150,55 @@ function renderSlideToCanvas(
       const totalHeight = lines.length * lineHeight;
       const startY = (SLIDE_H - totalHeight) / 2 + lineHeight / 2;
 
-      // Black outline stroked underneath, then white fill on top.
-      // lineJoin "round" prevents spiky corners at large stroke widths.
-      ctx.strokeStyle = "black";
+      // Randomly pick one of three text styles
+      const textStyle = Math.floor(Math.random() * 3);
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
-      ctx.lineWidth = Math.round(fontSize * 0.18); // ≈13px at 72pt
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = 12;
 
-      for (let i = 0; i < lines.length; i++) {
-        ctx.strokeText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
-      }
-
-      // Drop shadow only lives on the stroke pass so the white fill stays crisp.
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = "white";
-      for (let i = 0; i < lines.length; i++) {
-        ctx.fillText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
+      if (textStyle === 0) {
+        // Style 1: White text with black outline
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = Math.round(fontSize * 0.18);
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 12;
+        for (let i = 0; i < lines.length; i++) {
+          ctx.strokeText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
+        }
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "white";
+        for (let i = 0; i < lines.length; i++) {
+          ctx.fillText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
+        }
+      } else if (textStyle === 1) {
+        // Style 2: White text with 50% opacity background shadow
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 20;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4;
+        ctx.fillStyle = "white";
+        // Double-draw for stronger shadow
+        for (let i = 0; i < lines.length; i++) {
+          ctx.fillText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
+        }
+        for (let i = 0; i < lines.length; i++) {
+          ctx.fillText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
+        }
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      } else {
+        // Style 3: Black text with solid white shadow
+        ctx.shadowColor = "white";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
+        ctx.fillStyle = "black";
+        for (let i = 0; i < lines.length; i++) {
+          ctx.fillText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
+        }
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
       }
 
       resolve(canvas);

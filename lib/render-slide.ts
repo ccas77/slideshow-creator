@@ -70,54 +70,92 @@ export async function renderSlide(
     .png()
     .toBuffer();
 
-  // 3. Text overlay: black stroke layer + white text layer
+  // 3. Text overlay — randomly pick one of three styles
   const escaped = escapeMarkup(text);
   const fontSize = 36;
   const pSize = fontSize * 1024;
+  const textStyle = Math.floor(Math.random() * 3);
 
-  // Black "stroke" text (rendered slightly larger via letter spacing trick)
-  const strokeMarkup = `<span foreground="black" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
-  const strokePng = await sharp({
-    text: {
-      text: strokeMarkup,
-      fontfile: fontFile,
-      width: SLIDE_W - 80,
-      align: "centre",
-      rgba: true,
-      dpi: 150,
-    },
-  }).png().toBuffer();
+  if (textStyle === 0) {
+    // Style 1: White text with black outline
+    const strokeMarkup = `<span foreground="black" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
+    const strokePng = await sharp({
+      text: { text: strokeMarkup, fontfile: fontFile, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
+    }).png().toBuffer();
 
-  // White text
-  const textMarkup = `<span foreground="white" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
-  const textPng = await sharp({
-    text: {
-      text: textMarkup,
-      fontfile: fontFile,
-      width: SLIDE_W - 80,
-      align: "centre",
-      rgba: true,
-      dpi: 150,
-    },
-  }).png().toBuffer();
+    const textMarkup = `<span foreground="white" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
+    const textPng = await sharp({
+      text: { text: textMarkup, fontfile: fontFile, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
+    }).png().toBuffer();
 
-  // Get text image dimensions to center it vertically
-  const textMeta = await sharp(textPng).metadata();
-  const textH = textMeta.height || 0;
-  const topOffset = Math.max(0, Math.round((SLIDE_H - textH) / 2));
+    const textMeta = await sharp(textPng).metadata();
+    const textH = textMeta.height || 0;
+    const topOffset = Math.max(0, Math.round((SLIDE_H - textH) / 2));
+    const off = 3;
 
-  // 4. Composite: base → gradient → stroke → text
-  // Stroke: 4 copies offset by 3px in each direction for outline effect
-  const off = 3;
-  return sharp(baseBuffer)
-    .composite([
-      { input: gradientPng },
-      { input: strokePng, top: topOffset - off, left: 40 },
-      { input: strokePng, top: topOffset + off, left: 40 },
-      { input: strokePng, top: topOffset, left: 40 - off },
-      { input: strokePng, top: topOffset, left: 40 + off },
-      { input: textPng, top: topOffset, left: 40 },
-    ])
-    .png()
-    .toBuffer();
+    return sharp(baseBuffer)
+      .composite([
+        { input: gradientPng },
+        { input: strokePng, top: topOffset - off, left: 40 },
+        { input: strokePng, top: topOffset + off, left: 40 },
+        { input: strokePng, top: topOffset, left: 40 - off },
+        { input: strokePng, top: topOffset, left: 40 + off },
+        { input: textPng, top: topOffset, left: 40 },
+      ])
+      .png()
+      .toBuffer();
+  } else if (textStyle === 1) {
+    // Style 2: White text with 50% opacity background shadow
+    const textMarkup = `<span foreground="white" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
+    const textPng = await sharp({
+      text: { text: textMarkup, fontfile: fontFile, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
+    }).png().toBuffer();
+
+    const textMeta = await sharp(textPng).metadata();
+    const textH = textMeta.height || 0;
+    const topOffset = Math.max(0, Math.round((SLIDE_H - textH) / 2));
+
+    // Create a blurred shadow version
+    const shadowPng = await sharp({
+      text: { text: `<span foreground="black" font_weight="bold" font_size="${pSize}">${escaped}</span>`, fontfile: fontFile, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
+    })
+      .blur(8)
+      .ensureAlpha()
+      .png()
+      .toBuffer();
+
+    return sharp(baseBuffer)
+      .composite([
+        { input: gradientPng },
+        { input: shadowPng, top: topOffset + 4, left: 40, blend: "over" },
+        { input: shadowPng, top: topOffset + 4, left: 40, blend: "over" },
+        { input: textPng, top: topOffset, left: 40 },
+      ])
+      .png()
+      .toBuffer();
+  } else {
+    // Style 3: Black text with solid white shadow
+    const shadowMarkup = `<span foreground="white" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
+    const shadowPng = await sharp({
+      text: { text: shadowMarkup, fontfile: fontFile, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
+    }).png().toBuffer();
+
+    const textMarkup = `<span foreground="black" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
+    const textPng = await sharp({
+      text: { text: textMarkup, fontfile: fontFile, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
+    }).png().toBuffer();
+
+    const textMeta = await sharp(textPng).metadata();
+    const textH = textMeta.height || 0;
+    const topOffset = Math.max(0, Math.round((SLIDE_H - textH) / 2));
+
+    return sharp(baseBuffer)
+      .composite([
+        { input: gradientPng },
+        { input: shadowPng, top: topOffset + 3, left: 43 },
+        { input: textPng, top: topOffset, left: 40 },
+      ])
+      .png()
+      .toBuffer();
+  }
 }
