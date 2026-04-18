@@ -76,6 +76,8 @@ export default function InstagramPage() {
 
   // Editor modal
   const [editing, setEditing] = useState<InstagramSlideshow | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeUrl, setAnalyzeUrl] = useState("");
 
   // Automation modal
   const [autoId, setAutoId] = useState<string | null>(null);
@@ -121,6 +123,68 @@ export default function InstagramPage() {
     } catch {}
     setSaving(false);
   }, []);
+
+  function analyzeUpload() {
+    if (!editing) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file || !editing) return;
+      setAnalyzing(true);
+      try {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        const res = await fetch("/api/analyze-slide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageData: dataUrl }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed");
+        const newItem = { id: uid(), name: file.name.replace(/\.[^.]+$/, ""), value: data.prompt };
+        setEditing({
+          ...editing,
+          imagePrompts: [...editing.imagePrompts, newItem],
+          imagePromptIds: [...editing.imagePromptIds, newItem.id],
+        });
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : "Failed to analyze");
+      } finally {
+        setAnalyzing(false);
+      }
+    };
+    input.click();
+  }
+
+  async function analyzeFromUrl() {
+    if (!analyzeUrl.trim() || !editing) return;
+    setAnalyzing(true);
+    try {
+      const res = await fetch("/api/analyze-slide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: analyzeUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      const newItem = { id: uid(), name: "From URL", value: data.prompt };
+      setEditing({
+        ...editing,
+        imagePrompts: [...editing.imagePrompts, newItem],
+        imagePromptIds: [...editing.imagePromptIds, newItem.id],
+      });
+      setAnalyzeUrl("");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to analyze");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   async function importSlideshow() {
     const book = books.find((b) => b.id === importBookId);
@@ -459,70 +523,215 @@ export default function InstagramPage() {
           <label className="block text-xs font-medium text-gray-500 mb-1">
             Image prompts ({editing.imagePrompts.length})
           </label>
-          <div className="space-y-1 max-h-28 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2 mb-4">
+          <div className="space-y-1 max-h-36 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2 mb-2">
             {editing.imagePrompts.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700"
+                className="rounded-lg border border-gray-200 bg-white px-2 py-1.5"
               >
-                <span className="truncate">{p.name}</span>
-                <button
-                  onClick={() =>
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <span className="truncate font-medium">{p.name}</span>
+                  <button
+                    onClick={() =>
+                      setEditing({
+                        ...editing,
+                        imagePrompts: editing.imagePrompts.filter(
+                          (x) => x.id !== p.id
+                        ),
+                        imagePromptIds: editing.imagePromptIds.filter(
+                          (x) => x !== p.id
+                        ),
+                      })
+                    }
+                    className="text-xs text-red-500 hover:text-red-600 ml-auto shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <textarea
+                  value={p.value}
+                  onChange={(e) =>
                     setEditing({
                       ...editing,
-                      imagePrompts: editing.imagePrompts.filter(
-                        (x) => x.id !== p.id
-                      ),
-                      imagePromptIds: editing.imagePromptIds.filter(
-                        (x) => x !== p.id
+                      imagePrompts: editing.imagePrompts.map((x) =>
+                        x.id === p.id ? { ...x, value: e.target.value } : x
                       ),
                     })
                   }
-                  className="text-xs text-red-500 hover:text-red-600 ml-auto shrink-0"
-                >
-                  Remove
-                </button>
+                  rows={2}
+                  className="w-full mt-1 rounded bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500/30 resize-none"
+                />
               </div>
             ))}
             {editing.imagePrompts.length === 0 && (
               <p className="text-xs text-gray-400 px-2 py-1">
-                No image prompts. They will be inherited from the source book.
+                No image prompts.
               </p>
             )}
+          </div>
+          <div className="flex gap-2 mb-2">
+            {(() => {
+              const sourceBook = books.find((b) => b.id === editing.sourceBookId);
+              const available = sourceBook?.imagePrompts.filter(
+                (p) => !editing.imagePromptIds.includes(p.id)
+              );
+              if (available && available.length > 0) {
+                return (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const item = available.find((p) => p.id === e.target.value);
+                      if (!item) return;
+                      setEditing({
+                        ...editing,
+                        imagePrompts: [...editing.imagePrompts, item],
+                        imagePromptIds: [...editing.imagePromptIds, item.id],
+                      });
+                    }}
+                    className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-500 focus:outline-none"
+                  >
+                    <option value="">+ Add from book pool…</option>
+                    {available.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                );
+              }
+              return null;
+            })()}
+            <button
+              onClick={() => {
+                const newItem = { id: uid(), name: `Prompt ${editing.imagePrompts.length + 1}`, value: "" };
+                setEditing({
+                  ...editing,
+                  imagePrompts: [...editing.imagePrompts, newItem],
+                  imagePromptIds: [...editing.imagePromptIds, newItem.id],
+                });
+              }}
+              className="text-xs text-blue-500 hover:text-blue-600"
+            >
+              + New prompt
+            </button>
+            <button
+              onClick={analyzeUpload}
+              disabled={analyzing}
+              className="text-xs text-purple-500 hover:text-purple-600 disabled:opacity-40"
+            >
+              {analyzing ? "Analyzing…" : "Analyze image"}
+            </button>
+          </div>
+          <div className="flex gap-2 mb-4">
+            <input
+              value={analyzeUrl}
+              onChange={(e) => setAnalyzeUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") analyzeFromUrl(); }}
+              placeholder="Paste image URL and press Enter…"
+              className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500/30"
+            />
+            <button
+              onClick={analyzeFromUrl}
+              disabled={!analyzeUrl.trim() || analyzing}
+              className="text-xs text-purple-500 hover:text-purple-600 disabled:opacity-40 shrink-0"
+            >
+              Extract
+            </button>
           </div>
 
           {/* Captions */}
           <label className="block text-xs font-medium text-gray-500 mb-1">
             Captions ({editing.captions.length})
           </label>
-          <div className="space-y-1 max-h-28 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2 mb-5">
+          <div className="space-y-1 max-h-36 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2 mb-2">
             {editing.captions.map((c) => (
               <div
                 key={c.id}
-                className="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-700"
+                className="rounded-lg border border-gray-200 bg-white px-2 py-1.5"
               >
-                <span className="truncate">{c.name}</span>
-                <button
-                  onClick={() =>
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <span className="truncate font-medium">{c.name}</span>
+                  <button
+                    onClick={() =>
+                      setEditing({
+                        ...editing,
+                        captions: editing.captions.filter(
+                          (x) => x.id !== c.id
+                        ),
+                        captionIds: editing.captionIds.filter(
+                          (x) => x !== c.id
+                        ),
+                      })
+                    }
+                    className="text-xs text-red-500 hover:text-red-600 ml-auto shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <textarea
+                  value={c.value}
+                  onChange={(e) =>
                     setEditing({
                       ...editing,
-                      captions: editing.captions.filter(
-                        (x) => x.id !== c.id
-                      ),
-                      captionIds: editing.captionIds.filter(
-                        (x) => x !== c.id
+                      captions: editing.captions.map((x) =>
+                        x.id === c.id ? { ...x, value: e.target.value } : x
                       ),
                     })
                   }
-                  className="text-xs text-red-500 hover:text-red-600 ml-auto shrink-0"
-                >
-                  Remove
-                </button>
+                  rows={2}
+                  className="w-full mt-1 rounded bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500/30 resize-none"
+                />
               </div>
             ))}
             {editing.captions.length === 0 && (
               <p className="text-xs text-gray-400 px-2 py-1">No captions.</p>
             )}
+          </div>
+          <div className="flex gap-2 mb-5">
+            {(() => {
+              const sourceBook = books.find((b) => b.id === editing.sourceBookId);
+              const available = sourceBook?.captions.filter(
+                (c) => !editing.captionIds.includes(c.id)
+              );
+              if (available && available.length > 0) {
+                return (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const item = available.find((c) => c.id === e.target.value);
+                      if (!item) return;
+                      setEditing({
+                        ...editing,
+                        captions: [...editing.captions, item],
+                        captionIds: [...editing.captionIds, item.id],
+                      });
+                    }}
+                    className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-500 focus:outline-none"
+                  >
+                    <option value="">+ Add from book pool…</option>
+                    {available.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                );
+              }
+              return null;
+            })()}
+            <button
+              onClick={() => {
+                const newItem = { id: uid(), name: `Caption ${editing.captions.length + 1}`, value: "" };
+                setEditing({
+                  ...editing,
+                  captions: [...editing.captions, newItem],
+                  captionIds: [...editing.captionIds, newItem.id],
+                });
+              }}
+              className="text-xs text-blue-500 hover:text-blue-600"
+            >
+              + New caption
+            </button>
           </div>
 
           <div className="flex gap-3 justify-end">
