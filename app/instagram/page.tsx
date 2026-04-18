@@ -30,13 +30,6 @@ interface TimeWindow {
   end: string;
 }
 
-interface InstagramAutomation {
-  enabled: boolean;
-  igAccountIds: number[];
-  tiktokAccountIds: number[];
-  intervals: TimeWindow[];
-}
-
 interface InstagramSlideshow {
   id: string;
   name: string;
@@ -47,7 +40,14 @@ interface InstagramSlideshow {
   captionIds: string[];
   imagePrompts: NamedItem[];
   captions: NamedItem[];
-  automation?: InstagramAutomation;
+}
+
+interface IgGlobalAutomation {
+  enabled: boolean;
+  igAccountIds: number[];
+  tiktokAccountIds: number[];
+  intervals: TimeWindow[];
+  igPointer: number;
 }
 
 interface TikTokAccount {
@@ -79,28 +79,31 @@ export default function InstagramPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeUrl, setAnalyzeUrl] = useState("");
 
-  // Automation modal
-  const [autoId, setAutoId] = useState<string | null>(null);
-  const [autoEnabled, setAutoEnabled] = useState(false);
-  const [autoIgAccounts, setAutoIgAccounts] = useState<number[]>([]);
-  const [autoTiktokAccounts, setAutoTiktokAccounts] = useState<number[]>([]);
-  const [autoIntervals, setAutoIntervals] = useState<TimeWindow[]>([
-    { start: "18:00", end: "20:00" },
-  ]);
+  // Global automation
+  const [showAutoModal, setShowAutoModal] = useState(false);
+  const [autoConfig, setAutoConfig] = useState<IgGlobalAutomation>({
+    enabled: false,
+    igAccountIds: [],
+    tiktokAccountIds: [],
+    intervals: [{ start: "18:00", end: "20:00" }],
+    igPointer: 0,
+  });
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [igRes, booksRes, ttRes, igAccRes] = await Promise.all([
+      const [igRes, booksRes, ttRes, igAccRes, autoRes] = await Promise.all([
         fetch("/api/ig-slideshows"),
         fetch("/api/books"),
         fetch("/api/post-tiktok"),
         fetch("/api/post-tiktok?platform=instagram"),
+        fetch("/api/ig-automation"),
       ]);
       if (igRes.ok) setIgSlideshows((await igRes.json()).slideshows || []);
       if (booksRes.ok) setBooks((await booksRes.json()).books || []);
       if (ttRes.ok) setAccounts((await ttRes.json()).accounts || []);
       if (igAccRes.ok) setIgAccounts((await igAccRes.json()).accounts || []);
+      if (autoRes.ok) setAutoConfig((await autoRes.json()).config);
     } catch (e) {
       console.error("Load error:", e);
     }
@@ -272,34 +275,17 @@ export default function InstagramPage() {
     persist(igSlideshows.filter((s) => s.id !== id));
   }
 
-  function openAutomation(s: InstagramSlideshow) {
-    const a = s.automation;
-    setAutoId(s.id);
-    setAutoEnabled(a?.enabled ?? false);
-    setAutoIgAccounts(a?.igAccountIds ?? []);
-    setAutoTiktokAccounts(a?.tiktokAccountIds ?? []);
-    setAutoIntervals(
-      a?.intervals?.length ? a.intervals : [{ start: "18:00", end: "20:00" }]
-    );
-  }
-
-  function saveAutomation() {
-    if (!autoId) return;
-    const next = igSlideshows.map((s) =>
-      s.id === autoId
-        ? {
-            ...s,
-            automation: {
-              enabled: autoEnabled,
-              igAccountIds: autoIgAccounts,
-              tiktokAccountIds: autoTiktokAccounts,
-              intervals: autoIntervals,
-            },
-          }
-        : s
-    );
-    persist(next);
-    setAutoId(null);
+  async function saveAutomation() {
+    setSaving(true);
+    try {
+      await fetch("/api/ig-automation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: autoConfig }),
+      });
+    } catch {}
+    setSaving(false);
+    setShowAutoModal(false);
   }
 
   const importBook = books.find((b) => b.id === importBookId);
@@ -320,6 +306,16 @@ export default function InstagramPage() {
             {saving && (
               <span className="text-xs text-gray-500">Saving…</span>
             )}
+            <button
+              onClick={() => setShowAutoModal(true)}
+              className={`px-4 py-2 rounded-xl font-semibold transition-colors text-sm shadow-sm ${
+                autoConfig.enabled
+                  ? "bg-green-500 text-white hover:bg-green-600"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {autoConfig.enabled ? "Auto On" : "Automation"}
+            </button>
             <button
               onClick={() => {
                 setImportBookId("");
@@ -349,7 +345,6 @@ export default function InstagramPage() {
               const slideCount = s.slideTexts
                 .split("\n")
                 .filter((l) => l.trim()).length;
-              const auto = s.automation;
               const sourceBook = books.find((b) => b.id === s.sourceBookId);
               return (
                 <div
@@ -368,21 +363,8 @@ export default function InstagramPage() {
                           <span> · from {sourceBook.name}</span>
                         )}
                       </div>
-                      {auto?.enabled && (
-                        <div className="inline-block mt-1.5 text-[10px] font-medium bg-green-50 text-green-600 px-2 py-0.5 rounded-full">
-                          Auto on ·{" "}
-                          {auto.igAccountIds.length} IG +{" "}
-                          {auto.tiktokAccountIds.length} TT
-                        </div>
-                      )}
                     </div>
                     <div className="flex gap-2 shrink-0 flex-wrap">
-                      <button
-                        onClick={() => openAutomation(s)}
-                        className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1 rounded-lg shadow-sm"
-                      >
-                        Automate
-                      </button>
                       <button
                         onClick={() => setEditing({ ...s })}
                         className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
@@ -751,19 +733,22 @@ export default function InstagramPage() {
         </Modal>
       )}
 
-      {/* Automation modal */}
-      {autoId && (
-        <Modal onClose={() => setAutoId(null)}>
-          <h3 className="text-lg font-semibold mb-4 text-gray-900">
-            Automation ·{" "}
-            {igSlideshows.find((s) => s.id === autoId)?.name}
+      {/* Global automation modal */}
+      {showAutoModal && (
+        <Modal onClose={() => setShowAutoModal(false)}>
+          <h3 className="text-lg font-semibold mb-2 text-gray-900">
+            Instagram Automation
           </h3>
+          <p className="text-xs text-gray-500 mb-5">
+            Round-robins through all slideshows. IG gets one carousel per day.
+            Each TikTok account gets a different slideshow as video, no duplicates.
+          </p>
 
           <label className="flex items-center gap-3 mb-5 cursor-pointer">
             <input
               type="checkbox"
-              checked={autoEnabled}
-              onChange={(e) => setAutoEnabled(e.target.checked)}
+              checked={autoConfig.enabled}
+              onChange={(e) => setAutoConfig({ ...autoConfig, enabled: e.target.checked })}
               className="accent-blue-500 w-4 h-4"
             />
             <span className="text-sm text-gray-900 font-medium">
@@ -771,9 +756,29 @@ export default function InstagramPage() {
             </span>
           </label>
 
+          {/* Queue preview */}
+          <label className="block text-xs font-medium text-gray-500 mb-2">
+            Slideshow queue ({igSlideshows.length})
+          </label>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-2 mb-4 max-h-28 overflow-y-auto">
+            {igSlideshows.length === 0 ? (
+              <p className="text-xs text-gray-400 px-2 py-1">No slideshows. Import some first.</p>
+            ) : (
+              igSlideshows.map((s, i) => (
+                <div key={s.id} className="flex items-center gap-2 px-2 py-1 text-sm text-gray-700">
+                  <span className={`text-[10px] w-4 text-center ${i === autoConfig.igPointer % igSlideshows.length ? "text-green-500 font-bold" : "text-gray-400"}`}>
+                    {i === autoConfig.igPointer % igSlideshows.length ? "→" : (i + 1)}
+                  </span>
+                  <span className="truncate">{s.name}</span>
+                  <span className="text-[10px] text-gray-400 ml-auto">{s.imagePrompts.length}p · {s.captions.length}c</span>
+                </div>
+              ))
+            )}
+          </div>
+
           {/* Instagram accounts */}
           <label className="block text-xs font-medium text-gray-500 mb-2">
-            Instagram accounts
+            Instagram accounts (carousel)
           </label>
           {igAccounts.length === 0 ? (
             <p className="text-xs text-gray-400 mb-4">
@@ -788,28 +793,27 @@ export default function InstagramPage() {
                 >
                   <input
                     type="checkbox"
-                    checked={autoIgAccounts.includes(a.id)}
+                    checked={autoConfig.igAccountIds.includes(a.id)}
                     onChange={() =>
-                      setAutoIgAccounts((prev) =>
-                        prev.includes(a.id)
-                          ? prev.filter((x) => x !== a.id)
-                          : [...prev, a.id]
-                      )
+                      setAutoConfig({
+                        ...autoConfig,
+                        igAccountIds: autoConfig.igAccountIds.includes(a.id)
+                          ? autoConfig.igAccountIds.filter((x) => x !== a.id)
+                          : [...autoConfig.igAccountIds, a.id],
+                      })
                     }
                     className="accent-blue-500"
                   />
-                  <span className="text-sm text-gray-700">
-                    @{a.username}
-                  </span>
+                  <span className="text-sm text-gray-700">@{a.username}</span>
                   <span className="text-[10px] text-gray-400 ml-auto">IG</span>
                 </label>
               ))}
             </div>
           )}
 
-          {/* TikTok accounts (for video) */}
+          {/* TikTok accounts */}
           <label className="block text-xs font-medium text-gray-500 mb-2">
-            TikTok accounts (video version)
+            TikTok accounts (video — each gets a different slideshow)
           </label>
           {accounts.length === 0 ? (
             <p className="text-xs text-gray-400 mb-4">
@@ -824,19 +828,18 @@ export default function InstagramPage() {
                 >
                   <input
                     type="checkbox"
-                    checked={autoTiktokAccounts.includes(a.id)}
+                    checked={autoConfig.tiktokAccountIds.includes(a.id)}
                     onChange={() =>
-                      setAutoTiktokAccounts((prev) =>
-                        prev.includes(a.id)
-                          ? prev.filter((x) => x !== a.id)
-                          : [...prev, a.id]
-                      )
+                      setAutoConfig({
+                        ...autoConfig,
+                        tiktokAccountIds: autoConfig.tiktokAccountIds.includes(a.id)
+                          ? autoConfig.tiktokAccountIds.filter((x) => x !== a.id)
+                          : [...autoConfig.tiktokAccountIds, a.id],
+                      })
                     }
                     className="accent-blue-500"
                   />
-                  <span className="text-sm text-gray-700">
-                    @{a.username}
-                  </span>
+                  <span className="text-sm text-gray-700">@{a.username}</span>
                   <span className="text-[10px] text-gray-400 ml-auto">TT</span>
                 </label>
               ))}
@@ -848,17 +851,18 @@ export default function InstagramPage() {
             Posting windows (UTC)
           </label>
           <div className="space-y-2 mb-2">
-            {autoIntervals.map((w, i) => (
+            {autoConfig.intervals.map((w, i) => (
               <div key={i} className="flex items-center gap-2">
                 <input
                   type="time"
                   value={w.start}
                   onChange={(e) =>
-                    setAutoIntervals((prev) =>
-                      prev.map((x, j) =>
+                    setAutoConfig({
+                      ...autoConfig,
+                      intervals: autoConfig.intervals.map((x, j) =>
                         j === i ? { ...x, start: e.target.value } : x
-                      )
-                    )
+                      ),
+                    })
                   }
                   className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
@@ -867,20 +871,22 @@ export default function InstagramPage() {
                   type="time"
                   value={w.end}
                   onChange={(e) =>
-                    setAutoIntervals((prev) =>
-                      prev.map((x, j) =>
+                    setAutoConfig({
+                      ...autoConfig,
+                      intervals: autoConfig.intervals.map((x, j) =>
                         j === i ? { ...x, end: e.target.value } : x
-                      )
-                    )
+                      ),
+                    })
                   }
                   className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                 />
-                {autoIntervals.length > 1 && (
+                {autoConfig.intervals.length > 1 && (
                   <button
                     onClick={() =>
-                      setAutoIntervals((prev) =>
-                        prev.filter((_, j) => j !== i)
-                      )
+                      setAutoConfig({
+                        ...autoConfig,
+                        intervals: autoConfig.intervals.filter((_, j) => j !== i),
+                      })
                     }
                     className="text-xs text-red-500 hover:text-red-600"
                   >
@@ -892,24 +898,23 @@ export default function InstagramPage() {
           </div>
           <button
             onClick={() =>
-              setAutoIntervals((prev) => [
-                ...prev,
-                { start: "12:00", end: "14:00" },
-              ])
+              setAutoConfig({
+                ...autoConfig,
+                intervals: [...autoConfig.intervals, { start: "12:00", end: "14:00" }],
+              })
             }
             className="text-xs text-blue-500 hover:text-blue-600 mb-1"
           >
             + Add window
           </button>
           <p className="text-[11px] text-gray-400 mb-5">
-            One post is scheduled per window per day, at a random time inside
-            the window. The same slideshow posts as a carousel to Instagram and
-            as a video to TikTok.
+            One post per window per day. IG round-robins through slideshows.
+            Each TikTok account gets a different random slideshow per window (no duplicates across accounts).
           </p>
 
           <div className="flex gap-3 justify-end">
             <button
-              onClick={() => setAutoId(null)}
+              onClick={() => setShowAutoModal(false)}
               className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm"
             >
               Cancel

@@ -280,13 +280,6 @@ export async function setTopNLists(
 
 // ── Instagram Slideshows (per-user) ──
 
-export interface InstagramAutomation {
-  enabled: boolean;
-  igAccountIds: number[];       // Instagram accounts to post carousel to
-  tiktokAccountIds: number[];   // TikTok accounts to post video to
-  intervals: TimeWindow[];
-}
-
 export interface InstagramSlideshow {
   id: string;
   name: string;
@@ -297,10 +290,18 @@ export interface InstagramSlideshow {
   captionIds: string[];
   imagePrompts: NamedItem[];    // local copy of prompts
   captions: NamedItem[];        // local copy of captions
-  automation?: InstagramAutomation;
+}
+
+export interface IgGlobalAutomation {
+  enabled: boolean;
+  igAccountIds: number[];
+  tiktokAccountIds: number[];
+  intervals: TimeWindow[];
+  igPointer: number; // round-robin index for IG slideshow
 }
 
 const igSlideshowsKey = (userId: string) => `u:${userId}:ig-slideshows`;
+const igAutomationKey = (userId: string) => `u:${userId}:ig-automation`;
 
 export async function getIgSlideshows(userId: string): Promise<InstagramSlideshow[]> {
   const data = await redis.get<InstagramSlideshow[]>(igSlideshowsKey(userId));
@@ -312,6 +313,15 @@ export async function setIgSlideshows(
   slideshows: InstagramSlideshow[]
 ): Promise<void> {
   await redis.set(igSlideshowsKey(userId), slideshows);
+}
+
+export async function getIgAutomation(userId: string): Promise<IgGlobalAutomation> {
+  const data = await redis.get<IgGlobalAutomation>(igAutomationKey(userId));
+  return data ?? { enabled: false, igAccountIds: [], tiktokAccountIds: [], intervals: [], igPointer: 0 };
+}
+
+export async function setIgAutomation(userId: string, config: IgGlobalAutomation): Promise<void> {
+  await redis.set(igAutomationKey(userId), config);
 }
 
 // ── Settings (per-user) ──
