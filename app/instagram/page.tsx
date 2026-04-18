@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppHeader from "@/components/AppHeader";
+import HowItWorks from "@/components/HowItWorks";
 
 interface NamedItem {
   id: string;
@@ -314,6 +315,12 @@ export default function InstagramPage() {
     <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="mx-auto w-full max-w-4xl px-6 sm:px-10 py-10">
         <AppHeader />
+        <HowItWorks>
+          <p><strong>Instagram</strong> — manage Instagram carousels adapted from your TikTok slideshows.</p>
+          <p>The <strong>Slideshows</strong> tab shows your IG slideshows. Each has its own slide texts, image prompts, and captions. Click Edit to modify inline.</p>
+          <p>The <strong>Import</strong> tab lets you pull slideshows from your books and adapt them for Instagram (max 10 slides).</p>
+          <p>The <strong>Automation</strong> tab sets up daily posting — IG gets one carousel per day (round-robin through your slideshows), and each selected TikTok account gets a different slideshow as a video. Every post gets a fresh AI-generated image.</p>
+        </HowItWorks>
 
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Instagram</h1>

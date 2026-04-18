@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AppHeader from "@/components/AppHeader";
+import HowItWorks from "@/components/HowItWorks";
 
 interface PublicUser {
   id: string;
@@ -170,6 +171,10 @@ export default function AdminPage() {
     <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="max-w-4xl mx-auto px-6 py-8">
         <AppHeader />
+        <HowItWorks>
+          <p><strong>Admin</strong> — manage users and their account access.</p>
+          <p>Create new users with Google email addresses and assign them roles. Control which TikTok accounts each user can access for posting and automation.</p>
+        </HowItWorks>
 
         <h1 className="text-2xl font-bold mb-6">Admin · Users</h1>
 

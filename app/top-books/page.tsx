@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import AppHeader from "@/components/AppHeader";
+import HowItWorks from "@/components/HowItWorks";
 
 interface TopBook {
   id: string;
@@ -462,6 +463,12 @@ export default function TopBooksPage() {
     <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="mx-auto w-full max-w-4xl px-6 sm:px-10 py-10">
         <AppHeader />
+        <HowItWorks>
+          <p><strong>Top Books</strong> — create curated "Top N" book lists and automate posting them.</p>
+          <p>Add books with cover images (upload or paste a URL). The AI can recognize title and author from the cover. Pin books to guarantee they appear in every generated list.</p>
+          <p>Create a <strong>list</strong> with a name, title text variations, caption pool, and background prompt pool. When published, it picks N books (pinned ones always included), shuffles the order, and generates a slideshow.</p>
+          <p>The <strong>automation</strong> modal lets you schedule daily posts to three account groups: TikTok carousels, TikTok videos, and Facebook videos.</p>
+        </HowItWorks>
 
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Top Books</h1>

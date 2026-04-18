@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AppHeader from "@/components/AppHeader";
+import HowItWorks from "@/components/HowItWorks";
 
 interface Book {
   id: string;
@@ -174,6 +175,11 @@ export default function CreatePage() {
     <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="mx-auto w-full max-w-3xl px-6 sm:px-10 py-10">
         <AppHeader />
+        <HowItWorks>
+          <p><strong>Create</strong> — generate slideshow content from book passages using AI.</p>
+          <p>Paste a passage from a book, add a hook (opening line), twist (surprising angle), and keywords. The AI turns it into a set of short, punchy slides optimized for TikTok.</p>
+          <p>You can <strong>tighten</strong> the output to make slides shorter, then <strong>save</strong> the result to a book as a new slideshow.</p>
+        </HowItWorks>
 
         <h1 className="text-2xl font-bold mb-1">Create Slideshow</h1>
         <p className="text-sm text-gray-500 mb-8">
