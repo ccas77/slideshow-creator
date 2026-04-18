@@ -191,7 +191,9 @@ export interface TopBook {
 
 export interface TopNAutomation {
   enabled: boolean;
-  accountIds: number[];
+  accountIds: number[]; // TikTok carousel accounts
+  videoAccountIds?: number[]; // TikTok video accounts
+  fbAccountIds?: number[]; // Facebook video accounts
   intervals: TimeWindow[]; // one post scheduled per interval per day
 }
 

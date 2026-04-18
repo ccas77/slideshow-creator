@@ -19,7 +19,9 @@ interface TimeWindow {
 
 interface TopNAutomation {
   enabled: boolean;
-  accountIds: number[];
+  accountIds: number[]; // TikTok carousel accounts
+  videoAccountIds?: number[]; // TikTok video accounts
+  fbAccountIds?: number[]; // Facebook video accounts
   intervals: TimeWindow[];
 }
 
@@ -43,6 +45,8 @@ export default function TopBooksPage() {
   const [books, setBooks] = useState<TopBook[]>([]);
   const [lists, setLists] = useState<TopNList[]>([]);
   const [accounts, setAccounts] = useState<TikTokAccount[]>([]);
+  const [igAccounts, setIgAccounts] = useState<TikTokAccount[]>([]);
+  const [fbAccounts, setFbAccounts] = useState<TikTokAccount[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Book form
@@ -81,6 +85,8 @@ export default function TopBooksPage() {
   const [autoListId, setAutoListId] = useState<string | null>(null);
   const [autoEnabled, setAutoEnabled] = useState(false);
   const [autoAccounts, setAutoAccounts] = useState<number[]>([]);
+  const [autoVideoAccounts, setAutoVideoAccounts] = useState<number[]>([]);
+  const [autoFbAccounts, setAutoFbAccounts] = useState<number[]>([]);
   const [autoIntervals, setAutoIntervals] = useState<TimeWindow[]>([
     { start: "18:00", end: "20:00" },
   ]);
@@ -96,14 +102,18 @@ export default function TopBooksPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [bRes, lRes, aRes] = await Promise.all([
+      const [bRes, lRes, aRes, igRes, fbRes] = await Promise.all([
         fetch(`/api/top-books`),
         fetch(`/api/top-n-lists`),
         fetch(`/api/post-tiktok`),
+        fetch(`/api/post-tiktok?platform=instagram`),
+        fetch(`/api/post-tiktok?platform=facebook`),
       ]);
       if (bRes.ok) setBooks((await bRes.json()).books || []);
       if (lRes.ok) setLists((await lRes.json()).lists || []);
       if (aRes.ok) setAccounts((await aRes.json()).accounts || []);
+      if (igRes.ok) setIgAccounts((await igRes.json()).accounts || []);
+      if (fbRes.ok) setFbAccounts((await fbRes.json()).accounts || []);
     } catch {}
     setLoading(false);
   }, []);
@@ -369,6 +379,8 @@ export default function TopBooksPage() {
     const a = list.automation;
     setAutoEnabled(!!a?.enabled);
     setAutoAccounts(a?.accountIds || []);
+    setAutoVideoAccounts(a?.videoAccountIds || []);
+    setAutoFbAccounts(a?.fbAccountIds || []);
     setAutoIntervals(
       a?.intervals && a.intervals.length > 0
         ? a.intervals
@@ -378,6 +390,18 @@ export default function TopBooksPage() {
 
   function toggleAutoAccount(id: number) {
     setAutoAccounts((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
+    );
+  }
+
+  function toggleAutoVideoAccount(id: number) {
+    setAutoVideoAccounts((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
+    );
+  }
+
+  function toggleAutoFbAccount(id: number) {
+    setAutoFbAccounts((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     );
   }
@@ -407,6 +431,8 @@ export default function TopBooksPage() {
               automation: {
                 enabled: autoEnabled,
                 accountIds: autoAccounts,
+                videoAccountIds: autoVideoAccounts,
+                fbAccountIds: autoFbAccounts,
                 intervals: autoIntervals,
               },
             }
@@ -769,23 +795,65 @@ export default function TopBooksPage() {
                 Enable auto-posting
               </label>
 
-              <div>
-                <label className="text-xs text-gray-500 block mb-2">Post to accounts</label>
-                <div className="space-y-2">
-                  {accounts.length === 0 && (
-                    <p className="text-xs text-gray-500">No accounts available. Configure them in Settings.</p>
-                  )}
-                  {accounts.map((a) => (
-                    <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={autoAccounts.includes(a.id)}
-                        onChange={() => toggleAutoAccount(a.id)}
-                        className="accent-blue-500 rounded"
-                      />
-                      @{a.username}
-                    </label>
-                  ))}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs text-gray-500 block mb-2">TikTok carousel accounts</label>
+                  <div className="space-y-2">
+                    {accounts.length === 0 && (
+                      <p className="text-xs text-gray-500">No TikTok accounts available.</p>
+                    )}
+                    {accounts.map((a) => (
+                      <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={autoAccounts.includes(a.id)}
+                          onChange={() => toggleAutoAccount(a.id)}
+                          className="accent-blue-500 rounded"
+                        />
+                        @{a.username}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-500 block mb-2">TikTok video accounts</label>
+                  <div className="space-y-2">
+                    {accounts.length === 0 && (
+                      <p className="text-xs text-gray-500">No TikTok accounts available.</p>
+                    )}
+                    {accounts.map((a) => (
+                      <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={autoVideoAccounts.includes(a.id)}
+                          onChange={() => toggleAutoVideoAccount(a.id)}
+                          className="accent-blue-500 rounded"
+                        />
+                        @{a.username}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-500 block mb-2">Facebook video accounts</label>
+                  <div className="space-y-2">
+                    {fbAccounts.length === 0 && (
+                      <p className="text-xs text-gray-500">No Facebook accounts available.</p>
+                    )}
+                    {fbAccounts.map((a) => (
+                      <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={autoFbAccounts.includes(a.id)}
+                          onChange={() => toggleAutoFbAccount(a.id)}
+                          className="accent-blue-500 rounded"
+                        />
+                        @{a.username}
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
 
