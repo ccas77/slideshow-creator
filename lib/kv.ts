@@ -305,6 +305,7 @@ export interface IgGlobalAutomation {
   tiktokAccountIds: number[];
   intervals: TimeWindow[];
   igPointer: number; // round-robin index for IG slideshow
+  accountBookIds?: Record<string, string[]>; // IG account ID → allowed source book IDs
 }
 
 const igSlideshowsKey = (userId: string) => `u:${userId}:ig-slideshows`;

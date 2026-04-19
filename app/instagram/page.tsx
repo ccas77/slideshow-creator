@@ -51,6 +51,7 @@ interface IgGlobalAutomation {
   tiktokAccountIds: number[];
   intervals: TimeWindow[];
   igPointer: number;
+  accountBookIds?: Record<string, string[]>;
 }
 
 interface TikTokAccount {
@@ -853,25 +854,61 @@ export default function InstagramPage() {
                     {igAccounts.length === 0 ? (
                       <p className="text-xs text-gray-400">No IG accounts connected in PostBridge.</p>
                     ) : (
-                      <div className="space-y-1">
-                        {igAccounts.map((a) => (
-                          <label key={a.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={autoConfig.igAccountIds.includes(a.id)}
-                              onChange={() =>
-                                setAutoConfig({
-                                  ...autoConfig,
-                                  igAccountIds: autoConfig.igAccountIds.includes(a.id)
-                                    ? autoConfig.igAccountIds.filter((x) => x !== a.id)
-                                    : [...autoConfig.igAccountIds, a.id],
-                                })
-                              }
-                              className="accent-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">@{a.username}</span>
-                          </label>
-                        ))}
+                      <div className="space-y-3">
+                        {igAccounts.map((a) => {
+                          const isSelected = autoConfig.igAccountIds.includes(a.id);
+                          const accBookIds = autoConfig.accountBookIds?.[String(a.id)] || [];
+                          return (
+                            <div key={a.id} className="rounded-xl border border-gray-100 bg-gray-50/50 p-3">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() =>
+                                    setAutoConfig({
+                                      ...autoConfig,
+                                      igAccountIds: isSelected
+                                        ? autoConfig.igAccountIds.filter((x) => x !== a.id)
+                                        : [...autoConfig.igAccountIds, a.id],
+                                    })
+                                  }
+                                  className="accent-blue-500"
+                                />
+                                <span className="text-sm font-medium text-gray-700">@{a.username}</span>
+                              </label>
+                              {isSelected && books.length > 0 && (
+                                <div className="mt-2 ml-6">
+                                  <p className="text-[11px] text-gray-400 mb-1">
+                                    {accBookIds.length === 0 ? "Posts from all books" : `Filtered to ${accBookIds.length} book(s)`}
+                                  </p>
+                                  <div className="space-y-0.5">
+                                    {books.map((b) => (
+                                      <label key={b.id} className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-white cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={accBookIds.includes(b.id)}
+                                          onChange={() => {
+                                            const current = autoConfig.accountBookIds || {};
+                                            const ids = current[String(a.id)] || [];
+                                            const next = ids.includes(b.id)
+                                              ? ids.filter((x) => x !== b.id)
+                                              : [...ids, b.id];
+                                            setAutoConfig({
+                                              ...autoConfig,
+                                              accountBookIds: { ...current, [String(a.id)]: next },
+                                            });
+                                          }}
+                                          className="accent-blue-500 w-3 h-3"
+                                        />
+                                        <span className="text-xs text-gray-600">{b.name}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
