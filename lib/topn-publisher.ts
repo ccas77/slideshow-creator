@@ -94,7 +94,10 @@ export async function publishTopN(
     caption,
     media: mediaIds,
     social_accounts: accountIds,
-    platform_configurations: { tiktok: { draft: false, is_aigc: true } },
+    platform_configurations: {
+      tiktok: { draft: false, is_aigc: true },
+      instagram: {},
+    },
   };
   if (scheduledAt) postBody.scheduled_at = scheduledAt;
 

@@ -340,14 +340,22 @@ export async function GET(req: NextRequest) {
         for (const list of lists) {
           const auto = list.automation;
           if (!auto || !auto.enabled) continue;
-          if (!auto.accountIds || auto.accountIds.length === 0) continue;
+          // Merge all account groups
+          const allAutoAccountIds = [
+            ...(auto.accountIds || []),
+            ...(auto.videoAccountIds || []),
+            ...(auto.fbAccountIds || []),
+            ...(auto.igCarouselAccountIds || []),
+            ...(auto.igVideoAccountIds || []),
+          ];
+          if (allAutoAccountIds.length === 0) continue;
           if (!auto.intervals || auto.intervals.length === 0) continue;
 
           // Filter automation accounts by user's currently allowed accounts
           const targetAccountIds =
             allowedIds && allowedIds.length > 0
-              ? auto.accountIds.filter((id) => allowedIds.includes(id))
-              : auto.accountIds;
+              ? allAutoAccountIds.filter((id) => allowedIds.includes(id))
+              : allAutoAccountIds;
           if (targetAccountIds.length === 0) continue;
 
           for (const win of auto.intervals) {

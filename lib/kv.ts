@@ -197,6 +197,8 @@ export interface TopNAutomation {
   accountIds: number[]; // TikTok carousel accounts
   videoAccountIds?: number[]; // TikTok video accounts
   fbAccountIds?: number[]; // Facebook video accounts
+  igCarouselAccountIds?: number[]; // Instagram carousel accounts
+  igVideoAccountIds?: number[]; // Instagram video accounts
   intervals: TimeWindow[]; // one post scheduled per interval per day
 }
 
