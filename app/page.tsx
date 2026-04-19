@@ -54,6 +54,7 @@ interface Slideshow {
 interface Book {
   id: string;
   name: string;
+  coverImage?: string;
   imagePrompts: NamedItem[];
   captions: NamedItem[];
   slideshows: Slideshow[];
@@ -254,6 +255,7 @@ export default function Home() {
   // Books (global)
   const [books, setBooks] = useState<Book[]>([]);
   const [expandedBooks, setExpandedBooks] = useState<string[]>([]);
+  const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
 
   const fetchBooks = useCallback(async () => {
     try {
@@ -293,6 +295,7 @@ export default function Home() {
     setImagePrompt(firstPrompt?.value || "");
     setBulkText(s.slideTexts);
     setCaption(firstCaption?.value || "");
+    setSelectedBookId(book?.id || null);
   }
 
   async function saveDraftToBook() {
@@ -603,9 +606,18 @@ export default function Home() {
     setPostStatus(null);
     try {
       const mediaIds: string[] = [];
-      for (let i = 0; i < slideshow.texts.length; i++) {
-        setPostStatus(`Uploading slide ${i + 1} of ${slideshow.texts.length}...`);
-        const canvas = await renderSlideToCanvas(slideshow.image, slideshow.texts[i]);
+      const coverImage = selectedBookId
+        ? books.find((b) => b.id === selectedBookId)?.coverImage
+        : undefined;
+      // If book has cover, drop the last text slide (book tag) since cover replaces it
+      const textSlides = coverImage && slideshow.texts.length > 2
+        ? slideshow.texts.slice(0, -1)
+        : slideshow.texts;
+      const totalSlides = textSlides.length + (coverImage ? 1 : 0);
+
+      for (let i = 0; i < textSlides.length; i++) {
+        setPostStatus(`Uploading slide ${i + 1} of ${totalSlides}...`);
+        const canvas = await renderSlideToCanvas(slideshow.image, textSlides[i]);
         const dataUrl = canvas.toDataURL("image/png");
 
         const res = await fetch("/api/post-tiktok?action=upload", {
@@ -615,6 +627,19 @@ export default function Home() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `Upload ${i + 1} failed`);
+        mediaIds.push(data.media_id);
+      }
+
+      // Upload book cover as final slide
+      if (coverImage) {
+        setPostStatus(`Uploading cover slide ${totalSlides} of ${totalSlides}...`);
+        const res = await fetch("/api/post-tiktok?action=upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: coverImage, index: textSlides.length }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Cover upload failed");
         mediaIds.push(data.media_id);
       }
 
@@ -637,7 +662,7 @@ export default function Home() {
     } finally {
       setPosting(false);
     }
-  }, [slideshow, caption, accountId, selectedAccount]);
+  }, [slideshow, caption, accountId, selectedAccount, selectedBookId, books]);
 
   const downloadAll = useCallback(async () => {
     if (!slideshow) return;
@@ -1163,7 +1188,18 @@ export default function Home() {
         )}
 
         {/* ============ STEP 3: Slides ============ */}
-        {step === 3 && slideshow && (
+        {step === 3 && slideshow && (() => {
+          const previewCover = selectedBookId
+            ? books.find((b) => b.id === selectedBookId)?.coverImage
+            : undefined;
+          // Drop the last text slide (book tag) when cover replaces it
+          const previewTexts = previewCover && slideshow.texts.length > 2
+            ? slideshow.texts.slice(0, -1)
+            : slideshow.texts;
+          const totalPreviewSlides = previewTexts.length + (previewCover ? 1 : 0);
+          const isCoverSlide = previewCover && currentSlide === totalPreviewSlides - 1;
+
+          return (
           <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 sm:p-8">
             <div className="flex flex-col items-center">
               {/* Slide frame — responsive, fits viewport */}
@@ -1175,59 +1211,77 @@ export default function Home() {
                   maxHeight: "60vh",
                 }}
               >
-                {slideshow.image ? (
+                {isCoverSlide ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={slideshow.image}
-                    alt={imagePrompt}
+                    src={previewCover}
+                    alt="Book cover"
                     style={{
                       position: "absolute",
                       inset: 0,
                       width: "100%",
                       height: "100%",
-                      objectFit: "cover",
+                      objectFit: "contain",
+                      background: "#000",
                     }}
                   />
                 ) : (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background: "linear-gradient(to bottom, #27272a, #18181b)",
-                    }}
-                  />
+                  <>
+                    {slideshow.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={slideshow.image}
+                        alt={imagePrompt}
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background: "linear-gradient(to bottom, #27272a, #18181b)",
+                        }}
+                      />
+                    )}
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "linear-gradient(to top, rgba(0,0,0,0.85) 15%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.4) 100%)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "1.5rem",
+                      }}
+                    >
+                      <p
+                        style={{
+                          fontSize: "1.4rem",
+                          fontWeight: 700,
+                          lineHeight: 1.3,
+                          color: "white",
+                          textShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                          textAlign: "center",
+                        }}
+                      >
+                        {previewTexts[currentSlide]}
+                      </p>
+                    </div>
+                  </>
                 )}
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    background:
-                      "linear-gradient(to top, rgba(0,0,0,0.85) 15%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.4) 100%)",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "1.5rem",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "1.4rem",
-                      fontWeight: 700,
-                      lineHeight: 1.3,
-                      color: "white",
-                      textShadow: "0 2px 8px rgba(0,0,0,0.5)",
-                      textAlign: "center",
-                    }}
-                  >
-                    {slideshow.texts[currentSlide]}
-                  </p>
-                </div>
               </div>
 
               {/* Prev / counter / Next */}
@@ -1240,15 +1294,15 @@ export default function Home() {
                   ‹
                 </button>
                 <div className="text-sm text-gray-400 tabular-nums">
-                  {currentSlide + 1} / {slideshow.texts.length}
+                  {currentSlide + 1} / {totalPreviewSlides}
                 </div>
                 <button
                   onClick={() =>
                     setCurrentSlide((i) =>
-                      Math.min(slideshow.texts.length - 1, i + 1)
+                      Math.min(totalPreviewSlides - 1, i + 1)
                     )
                   }
-                  disabled={currentSlide === slideshow.texts.length - 1}
+                  disabled={currentSlide === totalPreviewSlides - 1}
                   className="w-10 h-10 rounded-full border border-gray-300 text-gray-900 disabled:text-gray-300 disabled:border-gray-200 hover:bg-gray-200 transition-colors"
                 >
                   ›
@@ -1257,7 +1311,7 @@ export default function Home() {
 
               {/* Dots */}
               <div className="flex gap-2 mt-4">
-                {slideshow.texts.map((_, i) => (
+                {Array.from({ length: totalPreviewSlides }).map((_, i) => (
                   <button
                     key={i}
                     onClick={() => setCurrentSlide(i)}
@@ -1326,7 +1380,8 @@ export default function Home() {
               </div>
             </div>
           </section>
-        )}
+          );
+        })()}
       </div>
 
       <style jsx>{`

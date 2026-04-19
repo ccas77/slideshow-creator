@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppHeader from "@/components/AppHeader";
 import HowItWorks from "@/components/HowItWorks";
+import SlidePreview from "@/components/SlidePreview";
 
 interface NamedItem {
   id: string;
@@ -21,6 +22,7 @@ interface Slideshow {
 interface Book {
   id: string;
   name: string;
+  coverImage?: string;
   imagePrompts: NamedItem[];
   captions: NamedItem[];
   slideshows: Slideshow[];
@@ -92,6 +94,7 @@ export default function InstagramPage() {
     igPointer: 0,
   });
   const [autoSaved, setAutoSaved] = useState(false);
+  const [previewSlideshow, setPreviewSlideshow] = useState<InstagramSlideshow | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -601,11 +604,17 @@ export default function InstagramPage() {
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm text-gray-900">{s.name}</div>
                             <div className="text-xs text-gray-500 mt-0.5">
-                              {slideCount} slides · {s.imagePrompts.length} prompts · {s.captions.length} captions
+                              {slideCount} slides{sourceBook?.coverImage ? " + cover" : ""} · {s.imagePrompts.length} prompts · {s.captions.length} captions
                               {sourceBook && <span> · from {sourceBook.name}</span>}
                             </div>
                           </div>
                           <div className="flex gap-2 shrink-0">
+                            <button
+                              onClick={() => setPreviewSlideshow(s)}
+                              className="text-xs text-blue-500 hover:text-blue-600 transition-colors"
+                            >
+                              Preview
+                            </button>
                             <button
                               onClick={() => startEditing(s)}
                               className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
@@ -904,6 +913,25 @@ export default function InstagramPage() {
             )}
           </>
         )}
+        {/* Slide Preview Modal */}
+        {previewSlideshow && (() => {
+          const sourceBook = books.find((b) => b.id === previewSlideshow.sourceBookId);
+          const previewSlides = previewSlideshow.slideTexts.split("\n").filter((l) => l.trim());
+          const coverImage = sourceBook?.coverImage;
+          // Drop last text slide when cover replaces it
+          const displaySlides = coverImage && previewSlides.length > 2
+            ? previewSlides.slice(0, -1)
+            : previewSlides;
+          const caption = previewSlideshow.captions[0]?.value;
+          return (
+            <SlidePreview
+              slides={displaySlides}
+              caption={caption}
+              coverImage={coverImage}
+              onClose={() => setPreviewSlideshow(null)}
+            />
+          );
+        })()}
       </div>
     </div>
   );

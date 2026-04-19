@@ -53,6 +53,7 @@ interface Job {
   slideTexts: string[];
   captionText: string;
   source: string;
+  coverImage?: string;
 }
 
 export async function GET(req: NextRequest) {
@@ -121,6 +122,7 @@ export async function GET(req: NextRequest) {
             let slideTexts: string[] = [];
             let captionText = "";
             let source = "";
+            let coverImage: string | undefined;
 
             const { bookId, slideshowIds, selections } = data.config;
             const candidates: Array<{
@@ -171,7 +173,13 @@ export async function GET(req: NextRequest) {
                 .split("\n")
                 .map((t) => t.trim())
                 .filter(Boolean);
+              // If book has a cover image, drop the last text slide (book tag)
+              // since the cover replaces it
+              if (book.coverImage && slideTexts.length > 2) {
+                slideTexts = slideTexts.slice(0, -1);
+              }
               captionText = pickedCaption?.value || "";
+              coverImage = book.coverImage;
               source = `book:${book.name}/${pickedSlideshow.name}`;
             } else {
               const prompt = pickRandom(data.prompts);
@@ -197,6 +205,7 @@ export async function GET(req: NextRequest) {
               slideTexts,
               captionText,
               source,
+              coverImage,
             });
           }
         } catch (err) {
@@ -243,6 +252,14 @@ export async function GET(req: NextRequest) {
         for (let j = 0; j < slideBufs.length; j++) {
           const mediaId = await uploadPng(slideBufs[j], `slide-${j + 1}.png`);
           mediaIds.push(mediaId);
+        }
+
+        // Upload book cover as final slide if available
+        if (job.coverImage) {
+          const base64 = job.coverImage.replace(/^data:[^;]+;base64,/, "");
+          const coverBuf = Buffer.from(base64, "base64");
+          const coverMediaId = await uploadPng(coverBuf, `slide-${slideBufs.length + 1}-cover.png`);
+          mediaIds.push(coverMediaId);
         }
 
         const scheduledAt = randomTimeInWindow(job.win.start, job.win.end);

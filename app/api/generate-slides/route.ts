@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
   const { error } = await requireSession(req);
   if (error) return error;
 
-  const { action, passage, bookTag, hook, twist, keywords, slides } =
+  const { action, passage, bookTag, hook, twist, keywords, slides, hasCover } =
     await req.json();
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -150,7 +150,11 @@ RULES:
     userMessage = `Cut the backstory and transition filler from these slides. Keep all dialogue, emojis, reader reactions, WTF moments, and juicy details exactly as written. Do not rewrite anything.\n\n${slides}`;
   } else {
     system = GUIDE;
-    userMessage = `Here is the source passage. DO NOT repeat it back. Transform it into slideshow beats following the guide. Use second person POV. Preserve all dialogue from the source.\n\n${passage}\n\nBOOK TAG (use this as the final line): ${bookTag}\n\nHOOK GUIDANCE (concept for slide one): ${hook}\n\nTWIST GUIDANCE (concept for final slide before book tag): ${twist}\n\nBACKLOADING KEYWORDS (put these at the END of slides, never the beginning): ${keywords}\n\nMAXIMUM 24 LINES. Start slide one based on the hook guidance above.`;
+    if (hasCover) {
+      userMessage = `Here is the source passage. DO NOT repeat it back. Transform it into slideshow beats following the guide. Use second person POV. Preserve all dialogue from the source.\n\n${passage}\n\nDO NOT include a book tag as the final line — the book cover image will be used as the final slide instead. End on the twist/cliffhanger.\n\nHOOK GUIDANCE (concept for slide one): ${hook}\n\nTWIST GUIDANCE (concept for final slide): ${twist}\n\nBACKLOADING KEYWORDS (put these at the END of slides, never the beginning): ${keywords}\n\nMAXIMUM 24 LINES. Start slide one based on the hook guidance above.`;
+    } else {
+      userMessage = `Here is the source passage. DO NOT repeat it back. Transform it into slideshow beats following the guide. Use second person POV. Preserve all dialogue from the source.\n\n${passage}\n\nBOOK TAG (use this as the final line): ${bookTag}\n\nHOOK GUIDANCE (concept for slide one): ${hook}\n\nTWIST GUIDANCE (concept for final slide before book tag): ${twist}\n\nBACKLOADING KEYWORDS (put these at the END of slides, never the beginning): ${keywords}\n\nMAXIMUM 24 LINES. Start slide one based on the hook guidance above.`;
+    }
   }
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
