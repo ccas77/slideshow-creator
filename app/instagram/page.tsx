@@ -136,9 +136,11 @@ export default function InstagramPage() {
 
   // ── Import ──
 
-  async function importSlideshow() {
-    const book = books.find((b) => b.id === importBookId);
-    const slideshow = book?.slideshows.find((s) => s.id === importSlideshowId);
+  async function importSlideshow(bookIdOverride?: string, slideshowIdOverride?: string, bulk?: boolean): Promise<InstagramSlideshow | undefined> {
+    const bId = bookIdOverride || importBookId;
+    const sId = slideshowIdOverride || importSlideshowId;
+    const book = books.find((b) => b.id === bId);
+    const slideshow = book?.slideshows.find((s) => s.id === sId);
     if (!book || !slideshow) return;
 
     const lines = slideshow.slideTexts.split("\n").filter((l) => l.trim());
@@ -182,9 +184,14 @@ export default function InstagramPage() {
       captions: finalCaptions,
     };
 
-    setTab("slideshows");
-    setEditingId(newIg.id);
-    setEditDraft(newIg);
+    if (bulk) {
+      // In bulk mode, return the new slideshow for the caller to accumulate
+      return newIg;
+    } else {
+      setTab("slideshows");
+      setEditingId(newIg.id);
+      setEditDraft(newIg);
+    }
     setImportBookId("");
     setImportSlideshowId("");
   }
@@ -361,12 +368,12 @@ export default function InstagramPage() {
           <>
             {/* ═══ Slideshows Tab ═══ */}
             {tab === "slideshows" && (
-              <div className="space-y-3">
+              <div className="space-y-6">
                 {igSlideshows.length === 0 ? (
                   <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-10 text-center">
                     <p className="text-gray-400 mb-2">No Instagram slideshows yet.</p>
                     <p className="text-xs text-gray-400 mb-4">
-                      Import a TikTok slideshow to get started.
+                      Import slideshows from your books to get started.
                     </p>
                     <button
                       onClick={() => setTab("import")}
@@ -376,10 +383,37 @@ export default function InstagramPage() {
                     </button>
                   </div>
                 ) : (
-                  igSlideshows.map((s) => {
+                  (() => {
+                    // Group slideshows by sourceBookId
+                    const groups = new Map<string, InstagramSlideshow[]>();
+                    for (const s of igSlideshows) {
+                      const key = s.sourceBookId || "__none__";
+                      if (!groups.has(key)) groups.set(key, []);
+                      groups.get(key)!.push(s);
+                    }
+                    // Sort: books with names first, then unlinked
+                    const sortedKeys = [...groups.keys()].sort((a, b) => {
+                      if (a === "__none__") return 1;
+                      if (b === "__none__") return -1;
+                      const nameA = books.find((bk) => bk.id === a)?.name || "";
+                      const nameB = books.find((bk) => bk.id === b)?.name || "";
+                      return nameA.localeCompare(nameB);
+                    });
+                    return sortedKeys.map((bookId) => {
+                      const group = groups.get(bookId)!;
+                      const sourceBook = bookId !== "__none__" ? books.find((b) => b.id === bookId) : null;
+                      return (
+                        <div key={bookId}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                              {sourceBook ? sourceBook.name : "Other"}
+                            </h3>
+                            <span className="text-[10px] text-gray-400">({group.length})</span>
+                          </div>
+                          <div className="space-y-3">
+                  {group.map((s) => {
                     const isEditing = editingId === s.id && editDraft;
                     const slideCount = s.slideTexts.split("\n").filter((l) => l.trim()).length;
-                    const sourceBook = books.find((b) => b.id === s.sourceBookId);
 
                     if (isEditing && editDraft) {
                       return (
@@ -604,8 +638,7 @@ export default function InstagramPage() {
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm text-gray-900">{s.name}</div>
                             <div className="text-xs text-gray-500 mt-0.5">
-                              {slideCount} slides{sourceBook?.coverImage ? " + cover" : ""} · {s.imagePrompts.length} prompts · {s.captions.length} captions
-                              {sourceBook && <span> · from {sourceBook.name}</span>}
+                              {slideCount} slides · {s.imagePrompts.length} prompts · {s.captions.length} captions
                             </div>
                           </div>
                           <div className="flex gap-2 shrink-0">
@@ -631,7 +664,12 @@ export default function InstagramPage() {
                         </div>
                       </div>
                     );
-                  })
+                  })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()
                 )}
 
                 {/* New slideshow being reviewed (from import) */}
@@ -675,61 +713,96 @@ export default function InstagramPage() {
 
             {/* ═══ Import Tab ═══ */}
             {tab === "import" && (
-              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Import from TikTok</h3>
-                <p className="text-xs text-gray-500 mb-6">
-                  Pick a book and slideshow. If it has more than 10 slides, Claude will select the best ones for Instagram.
+              <div className="space-y-4">
+                <p className="text-xs text-gray-500">
+                  Import slideshows from your books. Slideshows with more than 10 slides will be truncated by Claude. Already-imported slideshows are grayed out.
                 </p>
 
-                <label className="block text-xs font-medium text-gray-500 mb-1">Book</label>
-                <select
-                  value={importBookId}
-                  onChange={(e) => {
-                    setImportBookId(e.target.value);
-                    setImportSlideshowId("");
-                  }}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                >
-                  <option value="">Select a book…</option>
-                  {books.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.slideshows.length} slideshows)
-                    </option>
-                  ))}
-                </select>
-
-                {importBook && (
-                  <>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Slideshow</label>
-                    <select
-                      value={importSlideshowId}
-                      onChange={(e) => setImportSlideshowId(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                    >
-                      <option value="">Select a slideshow…</option>
-                      {importBook.slideshows.map((s) => {
-                        const count = s.slideTexts.split("\n").filter((l) => l.trim()).length;
-                        return (
-                          <option key={s.id} value={s.id}>
-                            {s.name} ({count} slides{count > 10 ? " → will be truncated" : ""})
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </>
-                )}
-
                 {truncating && (
-                  <p className="text-sm text-blue-500 mb-4">Claude is selecting the best slides…</p>
+                  <div className="bg-blue-50 rounded-2xl border border-blue-200 p-4 text-sm text-blue-600">
+                    Claude is selecting the best slides for Instagram…
+                  </div>
                 )}
 
-                <button
-                  onClick={importSlideshow}
-                  disabled={!importBookId || !importSlideshowId || truncating}
-                  className="px-5 py-2.5 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 transition-colors text-sm shadow-sm disabled:opacity-40"
-                >
-                  Import
-                </button>
+                {books.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-10 text-center text-gray-400">
+                    No books yet. Create a book first.
+                  </div>
+                ) : (
+                  books.map((book) => {
+                    const importedSlideshowIds = new Set(
+                      igSlideshows
+                        .filter((s) => s.sourceBookId === book.id && s.sourceSlideshowId)
+                        .map((s) => s.sourceSlideshowId!)
+                    );
+                    const newSlideshows = book.slideshows.filter((s) => !importedSlideshowIds.has(s.id));
+                    const allImported = newSlideshows.length === 0;
+
+                    return (
+                      <div key={book.id} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h3 className="text-sm font-semibold text-gray-900">{book.name}</h3>
+                            <p className="text-xs text-gray-500">
+                              {book.slideshows.length} slideshow{book.slideshows.length !== 1 ? "s" : ""} · {importedSlideshowIds.size} imported · {newSlideshows.length} new
+                            </p>
+                          </div>
+                          {newSlideshows.length > 0 && (
+                            <button
+                              onClick={async () => {
+                                const imported: InstagramSlideshow[] = [];
+                                for (const ss of newSlideshows) {
+                                  const result = await importSlideshow(book.id, ss.id, true);
+                                  if (result) imported.push(result);
+                                }
+                                if (imported.length > 0) {
+                                  await persist([...igSlideshows, ...imported]);
+                                }
+                              }}
+                              disabled={truncating}
+                              className="text-xs bg-blue-500 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-600 transition-colors shadow-sm disabled:opacity-40"
+                            >
+                              Import all new ({newSlideshows.length})
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          {book.slideshows.map((ss) => {
+                            const alreadyImported = importedSlideshowIds.has(ss.id);
+                            const slideCount = ss.slideTexts.split("\n").filter((l) => l.trim()).length;
+                            return (
+                              <div
+                                key={ss.id}
+                                className={`flex items-center justify-between px-3 py-2 rounded-xl ${
+                                  alreadyImported ? "bg-gray-50 text-gray-400" : "bg-gray-50 text-gray-700"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {alreadyImported && (
+                                    <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded shrink-0">imported</span>
+                                  )}
+                                  <span className="text-sm truncate">{ss.name}</span>
+                                  <span className="text-[10px] text-gray-400 shrink-0">
+                                    {slideCount} slides{slideCount > 10 ? " → truncate" : ""}
+                                  </span>
+                                </div>
+                                {!alreadyImported && (
+                                  <button
+                                    onClick={() => importSlideshow(book.id, ss.id)}
+                                    disabled={truncating}
+                                    className="text-xs text-blue-500 hover:text-blue-600 shrink-0 ml-2 disabled:opacity-40"
+                                  >
+                                    Import
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             )}
 
