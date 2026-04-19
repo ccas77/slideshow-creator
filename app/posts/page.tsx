@@ -9,14 +9,21 @@ interface TikTokAccount {
   username: string;
 }
 
+interface PostResult {
+  accountId: number;
+  username: string | null;
+  profileUrl: string | null;
+}
+
 interface Post {
   id: string;
   caption: string;
   status: string;
   scheduled_at: string | null;
+  posted_at: string | null;
   social_accounts: number[];
   slide_count: number;
-  videoUrl?: string | null;
+  results: PostResult[];
 }
 
 export default function PostsPage() {
@@ -152,30 +159,60 @@ export default function PostsPage() {
                         <span className="text-xs text-gray-500">
                           {p.slide_count} slides
                         </span>
-                        {p.scheduled_at && (
+                      </div>
+
+                      {/* Date/time info */}
+                      <div className="flex flex-col gap-0.5 mb-2">
+                        {p.status === "posted" && p.posted_at && (
                           <span className="text-xs text-gray-500">
-                            {new Date(p.scheduled_at).toLocaleString()}
+                            Posted {new Date(p.posted_at).toLocaleString()}
                           </span>
                         )}
-                        <span className="text-xs text-gray-400">
-                          {p.social_accounts
-                            .map((id) => `@${accountUsername(id)}`)
-                            .join(", ")}
-                        </span>
+                        {isScheduled && p.scheduled_at && (
+                          <span className="text-xs text-gray-500">
+                            Scheduled for {new Date(p.scheduled_at).toLocaleString()}
+                          </span>
+                        )}
+                        {p.status === "posted" && !p.posted_at && p.scheduled_at && (
+                          <span className="text-xs text-gray-500">
+                            Scheduled {new Date(p.scheduled_at).toLocaleString()}
+                          </span>
+                        )}
                       </div>
+
+                      {/* Account links */}
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {p.results.length > 0 ? (
+                          p.results.map((r, idx) => {
+                            const name = r.username || accountUsername(r.accountId);
+                            return r.profileUrl ? (
+                              <a
+                                key={idx}
+                                href={r.profileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-500 hover:text-blue-600 transition-colors"
+                              >
+                                @{name}
+                              </a>
+                            ) : (
+                              <span key={idx} className="text-xs text-gray-400">
+                                @{name}
+                              </span>
+                            );
+                          })
+                        ) : (
+                          p.social_accounts.map((id) => (
+                            <span key={id} className="text-xs text-gray-400">
+                              @{accountUsername(id)}
+                            </span>
+                          ))
+                        )}
+                      </div>
+
                       <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap">
                         {p.caption || "(no caption)"}
                       </p>
-                      {p.videoUrl && (
-                        <a
-                          href={p.videoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-block mt-2 text-xs text-blue-500 hover:text-blue-600 transition-colors"
-                        >
-                          View profile on TikTok &rarr;
-                        </a>
-                      )}
                     </div>
                     {isScheduled && (
                       <button

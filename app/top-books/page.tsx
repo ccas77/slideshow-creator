@@ -938,7 +938,7 @@ function BookCard({
       <div className="text-sm font-medium truncate text-gray-900">{book.title}</div>
       {book.author && <div className="text-xs text-gray-500 truncate">{book.author}</div>}
       {book.genre && <div className="text-[10px] text-gray-400 truncate">{book.genre}</div>}
-      <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-2 mt-2">
         <button onClick={onTogglePin} className={`text-[10px] px-1.5 py-0.5 rounded ${book.pinned ? "bg-amber-50 text-amber-600" : "bg-gray-100 text-gray-500"}`}>
           {book.pinned ? "Pinned" : "Pin"}
         </button>

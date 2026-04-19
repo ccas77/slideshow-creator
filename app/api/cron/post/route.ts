@@ -243,8 +243,9 @@ export async function GET(req: NextRequest) {
       }
       try {
         const slideBufs: Buffer[] = [];
+        const textStyle = Math.floor(Math.random() * 3);
         for (const text of job.slideTexts) {
-          const buf = await renderSlide(image, text);
+          const buf = await renderSlide(image, text, textStyle);
           slideBufs.push(buf);
         }
 

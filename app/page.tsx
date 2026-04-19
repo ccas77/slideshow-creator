@@ -111,7 +111,8 @@ const SLIDE_H = 1920;
 
 function renderSlideToCanvas(
   imageSrc: string | null,
-  text: string
+  text: string,
+  textStyle?: number
 ): Promise<HTMLCanvasElement> {
   return new Promise((resolve) => {
     const canvas = document.createElement("canvas");
@@ -152,12 +153,12 @@ function renderSlideToCanvas(
       const totalHeight = lines.length * lineHeight;
       const startY = (SLIDE_H - totalHeight) / 2 + lineHeight / 2;
 
-      // Randomly pick one of three text styles
-      const textStyle = Math.floor(Math.random() * 3);
+      // Pick text style (use provided or random)
+      const resolvedStyle = textStyle ?? Math.floor(Math.random() * 3);
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
 
-      if (textStyle === 0) {
+      if (resolvedStyle === 0) {
         // Style 1: White text with black outline
         ctx.strokeStyle = "black";
         ctx.lineWidth = Math.round(fontSize * 0.18);
@@ -171,7 +172,7 @@ function renderSlideToCanvas(
         for (let i = 0; i < lines.length; i++) {
           ctx.fillText(lines[i], SLIDE_W / 2, startY + i * lineHeight);
         }
-      } else if (textStyle === 1) {
+      } else if (resolvedStyle === 1) {
         // Style 2: White text with 50% opacity background shadow
         ctx.shadowColor = "rgba(0,0,0,0.5)";
         ctx.shadowBlur = 20;
@@ -230,7 +231,7 @@ function renderSlideToCanvas(
   });
 }
 
-type Step = 1 | 2 | 3;
+type Tab = "automation" | "post-now";
 
 export default function Home() {
   const [hydrated, setHydrated] = useState(false);
@@ -378,7 +379,7 @@ export default function Home() {
   }
 
   // Flow
-  const [step, setStep] = useState<Step>(1);
+  const [tab, setTab] = useState<Tab>("automation");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [slideshow, setSlideshow] = useState<GeneratedSlideshow | null>(null);
@@ -588,7 +589,6 @@ export default function Home() {
       const data = await res.json();
       setSlideshow(data);
       setCurrentSlide(0);
-      setStep(3);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -615,9 +615,10 @@ export default function Home() {
         : slideshow.texts;
       const totalSlides = textSlides.length + (coverImage ? 1 : 0);
 
+      const slideStyle = Math.floor(Math.random() * 3);
       for (let i = 0; i < textSlides.length; i++) {
         setPostStatus(`Uploading slide ${i + 1} of ${totalSlides}...`);
-        const canvas = await renderSlideToCanvas(slideshow.image, textSlides[i]);
+        const canvas = await renderSlideToCanvas(slideshow.image, textSlides[i], slideStyle);
         const dataUrl = canvas.toDataURL("image/png");
 
         const res = await fetch("/api/post-tiktok?action=upload", {
@@ -667,8 +668,9 @@ export default function Home() {
   const downloadAll = useCallback(async () => {
     if (!slideshow) return;
     setDownloading(true);
+    const slideStyle = Math.floor(Math.random() * 3);
     for (let i = 0; i < slideshow.texts.length; i++) {
-      const canvas = await renderSlideToCanvas(slideshow.image, slideshow.texts[i]);
+      const canvas = await renderSlideToCanvas(slideshow.image, slideshow.texts[i], slideStyle);
       const link = document.createElement("a");
       link.download = `slide-${i + 1}.png`;
       link.href = canvas.toDataURL("image/png");
@@ -688,60 +690,381 @@ export default function Home() {
           <p>Select a book and slideshow, pick which accounts to post to, and set time windows for automated daily posting. Each post gets a fresh AI-generated image.</p>
           <p>Use the automation toggle to enable/disable scheduled posting. Time windows are in UTC — one post is scheduled at a random time within each window.</p>
         </HowItWorks>
-        <p className="text-sm text-gray-500 mb-6 -mt-4">
-          {selectedAccount
-            ? `Working as @${selectedAccount.username}`
-            : "Choose an account to begin"}
-        </p>
-
-        {/* Stepper */}
-        <div className="flex items-center gap-2 mb-10">
-          {[1, 2, 3].map((n) => {
-            const active = step === n;
-            const done = step > n;
-            return (
-              <div key={n} className="flex-1 flex items-center gap-2">
-                <div
-                  className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold border transition-colors ${
-                    active
-                      ? "bg-blue-500 text-gray-900 border-blue-500"
-                      : done
-                      ? "bg-blue-100 text-blue-600 border-blue-200"
-                      : "bg-transparent text-gray-400 border-gray-300"
-                  }`}
-                >
-                  {done ? "✓" : n}
-                </div>
-                <div className="text-xs text-gray-500 hidden sm:block">
-                  {n === 1 ? "Account" : n === 2 ? "Content" : "Slides"}
-                </div>
-                {n < 3 && <div className="flex-1 h-px bg-gray-200" />}
-              </div>
-            );
-          })}
+        {/* Tab switcher */}
+        <div className="flex gap-1 p-1 rounded-xl bg-gray-100 border border-gray-200/60 mb-8">
+          {([["automation", "Automation"], ["post-now", "Post Now"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                tab === key
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* ============ STEP 1: Account ============ */}
-        {step === 1 && (
-          <section className="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-8">
-            <h2 className="text-lg font-semibold mb-1 text-gray-900">Choose TikTok account</h2>
-            <p className="text-sm text-gray-500 mb-6">
-              Your prompts and slide texts are saved separately per account.
-            </p>
+        {/* ============ TAB: Automation ============ */}
+        {tab === "automation" && (
+          <section className="space-y-6">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-8">
+              <h2 className="text-lg font-semibold mb-1 text-gray-900">Automation</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                Set up scheduled daily posting for your TikTok accounts.
+              </p>
 
-            {accounts.length === 0 ? (
-              <p className="text-sm text-gray-500">Loading accounts…</p>
-            ) : (
-              <>
-                <label className="block text-sm font-medium text-gray-500 mb-2">
-                  Account
-                </label>
+              {accounts.length === 0 ? (
+                <p className="text-sm text-gray-500">Loading accounts…</p>
+              ) : (
+                <>
+                  <label className="block text-sm font-medium text-gray-500 mb-2">
+                    Account
+                  </label>
+                  <select
+                    value={accountId ?? ""}
+                    onChange={(e) =>
+                      setAccountId(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 mb-6"
+                  >
+                    <option value="">Select an account…</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        @{a.username}
+                      </option>
+                    ))}
+                  </select>
+
+                  {accountId != null && !loadingAccount && (
+                    <div className="rounded-xl border border-gray-200/60 bg-gray-50 p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            Automate daily posts
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            Picks a random slideshow from your selected books and
+                            generates a fresh image each time.
+                          </div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            setConfig({ ...config, enabled: !config.enabled })
+                          }
+                          className={`relative w-11 h-6 rounded-full transition-colors ${
+                            config.enabled ? "bg-green-500" : "bg-gray-300"
+                          }`}
+                          aria-label="Toggle automation"
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                              config.enabled ? "translate-x-5" : ""
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {config.enabled && (
+                        <>
+                          <div className="mb-1">
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="text-xs text-gray-500">
+                                Posting intervals (1 post per interval)
+                              </label>
+                              <button
+                                onClick={() => {
+                                  const intervals = [
+                                    ...(config.intervals || []),
+                                    { start: "18:00", end: "20:00" },
+                                  ];
+                                  setConfig({ ...config, intervals });
+                                }}
+                                className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
+                              >
+                                + Add interval
+                              </button>
+                            </div>
+                            {(config.intervals && config.intervals.length > 0
+                              ? config.intervals
+                              : [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]
+                            ).map((win, idx) => (
+                              <div
+                                key={idx}
+                                className="grid grid-cols-[1fr_1fr_auto] gap-2 mb-2 items-end"
+                              >
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">
+                                    From
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={utcToLocal(win.start)}
+                                    onChange={(e) => {
+                                      const intervals = [
+                                        ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
+                                      ];
+                                      intervals[idx] = {
+                                        ...intervals[idx],
+                                        start: localToUtc(e.target.value),
+                                      };
+                                      setConfig({ ...config, intervals });
+                                    }}
+                                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-gray-500 mb-1">
+                                    To
+                                  </label>
+                                  <input
+                                    type="time"
+                                    value={utcToLocal(win.end)}
+                                    onChange={(e) => {
+                                      const intervals = [
+                                        ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
+                                      ];
+                                      intervals[idx] = {
+                                        ...intervals[idx],
+                                        end: localToUtc(e.target.value),
+                                      };
+                                      setConfig({ ...config, intervals });
+                                    }}
+                                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                                  />
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    const intervals = [
+                                      ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
+                                    ];
+                                    if (intervals.length <= 1) return;
+                                    intervals.splice(idx, 1);
+                                    setConfig({ ...config, intervals });
+                                  }}
+                                  className="pb-2 text-gray-400 hover:text-red-500 transition-colors text-sm"
+                                  title="Remove interval"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                            <p className="text-xs text-gray-400 mt-1">
+                              Each interval schedules 1 post at a random time within it.
+                            </p>
+                          </div>
+                          {lastRun && (
+                            <p className="text-xs text-gray-400 mt-2">
+                              Last run: {new Date(lastRun).toLocaleString()} —{" "}
+                              {lastStatus}
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {accountId != null && config.enabled && (
+                    <div className="mt-6 rounded-xl border border-gray-200/60 bg-gray-50 p-5">
+                      <div className="text-sm font-medium text-gray-900 mb-3">
+                        Source book & slideshows
+                      </div>
+                      {books.length === 0 ? (
+                        <p className="text-xs text-gray-500">
+                          No books yet. Create one on the{" "}
+                          <a href="/books" className="underline hover:text-gray-900">
+                            Books
+                          </a>{" "}
+                          page first.
+                        </p>
+                      ) : (() => {
+                        const sels = config.selections || [];
+                        const selectedBooks = books.filter((b) =>
+                          expandedBooks.includes(b.id)
+                        );
+                        return (
+                          <>
+                            <label className="text-xs text-gray-500 mb-1 block">
+                              Books
+                            </label>
+                            <div className="space-y-1 max-h-40 overflow-y-auto mb-4">
+                              {books.map((b) => {
+                                const bookSelected = expandedBooks.includes(b.id);
+                                return (
+                                  <label
+                                    key={b.id}
+                                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={bookSelected}
+                                      onChange={() => {
+                                        if (bookSelected) {
+                                          setConfig({
+                                            ...config,
+                                            selections: sels.filter(
+                                              (s) => s.bookId !== b.id
+                                            ),
+                                          });
+                                          setExpandedBooks((prev) =>
+                                            prev.filter((id) => id !== b.id)
+                                          );
+                                        } else {
+                                          setExpandedBooks((prev) => [...prev, b.id]);
+                                        }
+                                      }}
+                                      className="accent-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-700">
+                                      {b.name}
+                                    </span>
+                                    <span className="text-xs text-gray-400 ml-auto">
+                                      {b.slideshows.length} slideshows
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+
+                            {selectedBooks.length > 0 && (
+                              <>
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="text-xs text-gray-500">
+                                    Slideshows
+                                  </label>
+                                  <div className="flex gap-3 text-xs">
+                                    <button
+                                      onClick={() => {
+                                        const all: Array<{
+                                          bookId: string;
+                                          slideshowId: string;
+                                        }> = [];
+                                        selectedBooks.forEach((b) =>
+                                          b.slideshows.forEach((s) =>
+                                            all.push({
+                                              bookId: b.id,
+                                              slideshowId: s.id,
+                                            })
+                                          )
+                                        );
+                                        setConfig({
+                                          ...config,
+                                          selections: all,
+                                        });
+                                      }}
+                                      className="text-gray-500 hover:text-blue-500 transition-colors"
+                                    >
+                                      All
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setConfig({
+                                          ...config,
+                                          selections: [],
+                                        });
+                                      }}
+                                      className="text-gray-500 hover:text-blue-500 transition-colors"
+                                    >
+                                      None
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="space-y-1 max-h-48 overflow-y-auto">
+                                  {selectedBooks.map((b) => (
+                                    <div key={b.id}>
+                                      <div className="text-xs font-medium text-gray-400 px-2 pt-2 pb-1">
+                                        {b.name}
+                                      </div>
+                                      {b.slideshows.map((s) => {
+                                        const checked = sels.some(
+                                          (sel) =>
+                                            sel.bookId === b.id &&
+                                            sel.slideshowId === s.id
+                                        );
+                                        return (
+                                          <label
+                                            key={s.id}
+                                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-100 cursor-pointer"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={checked}
+                                              onChange={() => {
+                                                setConfig({
+                                                  ...config,
+                                                  selections: checked
+                                                    ? sels.filter(
+                                                        (sel) =>
+                                                          !(
+                                                            sel.bookId === b.id &&
+                                                            sel.slideshowId ===
+                                                              s.id
+                                                          )
+                                                      )
+                                                    : [
+                                                        ...sels,
+                                                        {
+                                                          bookId: b.id,
+                                                          slideshowId: s.id,
+                                                        },
+                                                      ],
+                                                });
+                                              }}
+                                              className="accent-blue-500"
+                                            />
+                                            <span className="text-sm text-gray-700">
+                                              {s.name}
+                                            </span>
+                                            <span className="text-xs text-gray-400 ml-auto">
+                                              {
+                                                s.slideTexts
+                                                  .split("\n")
+                                                  .filter((t) => t.trim()).length
+                                              }{" "}
+                                              slides
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                            <p className="text-xs text-gray-400 mt-2">
+                              Pick books first, then choose which slideshows to
+                              include. Cron picks randomly across all selected.
+                            </p>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ============ TAB: Post Now ============ */}
+        {tab === "post-now" && (
+          <section className="space-y-6">
+            {/* Account selector for posting */}
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6">
+              <label className="block text-sm font-medium text-gray-500 mb-2">
+                Post to account
+              </label>
+              {accounts.length === 0 ? (
+                <p className="text-sm text-gray-500">Loading accounts…</p>
+              ) : (
                 <select
                   value={accountId ?? ""}
                   onChange={(e) =>
                     setAccountId(e.target.value ? Number(e.target.value) : null)
                   }
-                  className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 mb-6"
+                  className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
                 >
                   <option value="">Select an account…</option>
                   {accounts.map((a) => (
@@ -750,327 +1073,9 @@ export default function Home() {
                     </option>
                   ))}
                 </select>
+              )}
+            </div>
 
-                {accountId != null && !loadingAccount && (
-                  <div className="mb-6 rounded-xl border border-gray-200/60 bg-gray-50 p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          Automate daily posts
-                        </div>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          Picks a random prompt, text set & caption from this
-                          account&apos;s saved items.
-                        </div>
-                      </div>
-                      <button
-                        onClick={() =>
-                          setConfig({ ...config, enabled: !config.enabled })
-                        }
-                        className={`relative w-11 h-6 rounded-full transition-colors ${
-                          config.enabled ? "bg-green-500" : "bg-gray-300"
-                        }`}
-                        aria-label="Toggle automation"
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                            config.enabled ? "translate-x-5" : ""
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    {config.enabled && (
-                      <>
-                        <div className="mb-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs text-gray-500">
-                              Posting intervals (1 post per interval)
-                            </label>
-                            <button
-                              onClick={() => {
-                                const intervals = [
-                                  ...(config.intervals || []),
-                                  { start: "18:00", end: "20:00" },
-                                ];
-                                setConfig({ ...config, intervals });
-                              }}
-                              className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
-                            >
-                              + Add interval
-                            </button>
-                          </div>
-                          {(config.intervals && config.intervals.length > 0
-                            ? config.intervals
-                            : [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]
-                          ).map((win, idx) => (
-                            <div
-                              key={idx}
-                              className="grid grid-cols-[1fr_1fr_auto] gap-2 mb-2 items-end"
-                            >
-                              <div>
-                                <label className="block text-xs text-gray-500 mb-1">
-                                  From
-                                </label>
-                                <input
-                                  type="time"
-                                  value={utcToLocal(win.start)}
-                                  onChange={(e) => {
-                                    const intervals = [
-                                      ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
-                                    ];
-                                    intervals[idx] = {
-                                      ...intervals[idx],
-                                      start: localToUtc(e.target.value),
-                                    };
-                                    setConfig({ ...config, intervals });
-                                  }}
-                                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-500 mb-1">
-                                  To
-                                </label>
-                                <input
-                                  type="time"
-                                  value={utcToLocal(win.end)}
-                                  onChange={(e) => {
-                                    const intervals = [
-                                      ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
-                                    ];
-                                    intervals[idx] = {
-                                      ...intervals[idx],
-                                      end: localToUtc(e.target.value),
-                                    };
-                                    setConfig({ ...config, intervals });
-                                  }}
-                                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                                />
-                              </div>
-                              <button
-                                onClick={() => {
-                                  const intervals = [
-                                    ...(config.intervals || [{ start: config.windowStart || "18:00", end: config.windowEnd || "20:00" }]),
-                                  ];
-                                  if (intervals.length <= 1) return;
-                                  intervals.splice(idx, 1);
-                                  setConfig({ ...config, intervals });
-                                }}
-                                className="pb-2 text-gray-400 hover:text-red-500 transition-colors text-sm"
-                                title="Remove interval"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                          <p className="text-xs text-gray-400 mt-1">
-                            Each interval schedules 1 post at a random time within it.
-                          </p>
-                        </div>
-                        {lastRun && (
-                          <p className="text-xs text-gray-400 mt-2">
-                            Last run: {new Date(lastRun).toLocaleString()} —{" "}
-                            {lastStatus}
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {accountId != null && config.enabled && (
-                  <div className="mb-6 rounded-xl border border-gray-200/60 bg-gray-50 p-5">
-                    <div className="text-sm font-medium text-gray-900 mb-3">
-                      Source book & slideshows
-                    </div>
-                    {books.length === 0 ? (
-                      <p className="text-xs text-gray-500">
-                        No books yet. Create one on the{" "}
-                        <a href="/books" className="underline hover:text-gray-900">
-                          Books
-                        </a>{" "}
-                        page first.
-                      </p>
-                    ) : (() => {
-                      const sels = config.selections || [];
-                      const selectedBooks = books.filter((b) =>
-                        expandedBooks.includes(b.id)
-                      );
-                      return (
-                        <>
-                          <label className="text-xs text-gray-500 mb-1 block">
-                            Books
-                          </label>
-                          <div className="space-y-1 max-h-40 overflow-y-auto mb-4">
-                            {books.map((b) => {
-                              const bookSelected = expandedBooks.includes(b.id);
-                              return (
-                                <label
-                                  key={b.id}
-                                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={bookSelected}
-                                    onChange={() => {
-                                      if (bookSelected) {
-                                        setConfig({
-                                          ...config,
-                                          selections: sels.filter(
-                                            (s) => s.bookId !== b.id
-                                          ),
-                                        });
-                                        setExpandedBooks((prev) =>
-                                          prev.filter((id) => id !== b.id)
-                                        );
-                                      } else {
-                                        setExpandedBooks((prev) => [...prev, b.id]);
-                                      }
-                                    }}
-                                    className="accent-blue-500"
-                                  />
-                                  <span className="text-sm text-gray-700">
-                                    {b.name}
-                                  </span>
-                                  <span className="text-xs text-gray-400 ml-auto">
-                                    {b.slideshows.length} slideshows
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </div>
-
-                          {selectedBooks.length > 0 && (
-                            <>
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="text-xs text-gray-500">
-                                  Slideshows
-                                </label>
-                                <div className="flex gap-3 text-xs">
-                                  <button
-                                    onClick={() => {
-                                      const all: Array<{
-                                        bookId: string;
-                                        slideshowId: string;
-                                      }> = [];
-                                      selectedBooks.forEach((b) =>
-                                        b.slideshows.forEach((s) =>
-                                          all.push({
-                                            bookId: b.id,
-                                            slideshowId: s.id,
-                                          })
-                                        )
-                                      );
-                                      setConfig({
-                                        ...config,
-                                        selections: all,
-                                      });
-                                    }}
-                                    className="text-gray-500 hover:text-blue-500 transition-colors"
-                                  >
-                                    All
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setConfig({
-                                        ...config,
-                                        selections: [],
-                                      });
-                                    }}
-                                    className="text-gray-500 hover:text-blue-500 transition-colors"
-                                  >
-                                    None
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="space-y-1 max-h-48 overflow-y-auto">
-                                {selectedBooks.map((b) => (
-                                  <div key={b.id}>
-                                    <div className="text-xs font-medium text-gray-400 px-2 pt-2 pb-1">
-                                      {b.name}
-                                    </div>
-                                    {b.slideshows.map((s) => {
-                                      const checked = sels.some(
-                                        (sel) =>
-                                          sel.bookId === b.id &&
-                                          sel.slideshowId === s.id
-                                      );
-                                      return (
-                                        <label
-                                          key={s.id}
-                                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
-                                        >
-                                          <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            onChange={() => {
-                                              setConfig({
-                                                ...config,
-                                                selections: checked
-                                                  ? sels.filter(
-                                                      (sel) =>
-                                                        !(
-                                                          sel.bookId === b.id &&
-                                                          sel.slideshowId ===
-                                                            s.id
-                                                        )
-                                                    )
-                                                  : [
-                                                      ...sels,
-                                                      {
-                                                        bookId: b.id,
-                                                        slideshowId: s.id,
-                                                      },
-                                                    ],
-                                              });
-                                            }}
-                                            className="accent-blue-500"
-                                          />
-                                          <span className="text-sm text-gray-700">
-                                            {s.name}
-                                          </span>
-                                          <span className="text-xs text-gray-400 ml-auto">
-                                            {
-                                              s.slideTexts
-                                                .split("\n")
-                                                .filter((t) => t.trim()).length
-                                            }{" "}
-                                            slides
-                                          </span>
-                                        </label>
-                                      );
-                                    })}
-                                  </div>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                          <p className="text-xs text-gray-400 mt-2">
-                            Pick books first, then choose which slideshows to
-                            include. Cron picks randomly across all selected.
-                          </p>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setStep(2)}
-                  disabled={accountId == null}
-                  className="w-full px-6 py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-                >
-                  Continue
-                </button>
-              </>
-            )}
-          </section>
-        )}
-
-        {/* ============ STEP 2: Content ============ */}
-        {step === 2 && (
-          <section className="space-y-6">
             {/* Library actions */}
             <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5 flex flex-wrap items-center gap-3">
               <div className="text-sm text-gray-400 mr-auto">
@@ -1159,229 +1164,216 @@ export default function Home() {
               </div>
             )}
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setStep(1)}
-                className="px-5 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
-              >
-                ← Back
-              </button>
-              <button
-                onClick={generate}
-                disabled={loading || !imagePrompt.trim() || slideCount === 0}
-                className="flex-1 px-6 py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <span
-                      className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
-                      style={{ animation: "spin 0.6s linear infinite" }}
-                    />
-                    Generating…
-                  </>
-                ) : (
-                  "Generate slideshow"
-                )}
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* ============ STEP 3: Slides ============ */}
-        {step === 3 && slideshow && (() => {
-          const previewCover = selectedBookId
-            ? books.find((b) => b.id === selectedBookId)?.coverImage
-            : undefined;
-          // Drop the last text slide (book tag) when cover replaces it
-          const previewTexts = previewCover && slideshow.texts.length > 2
-            ? slideshow.texts.slice(0, -1)
-            : slideshow.texts;
-          const totalPreviewSlides = previewTexts.length + (previewCover ? 1 : 0);
-          const isCoverSlide = previewCover && currentSlide === totalPreviewSlides - 1;
-
-          return (
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 sm:p-8">
-            <div className="flex flex-col items-center">
-              {/* Slide frame — responsive, fits viewport */}
-              <div
-                className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-50"
-                style={{
-                  width: "min(100%, 320px)",
-                  aspectRatio: "9 / 16",
-                  maxHeight: "60vh",
-                }}
-              >
-                {isCoverSlide ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={previewCover}
-                    alt="Book cover"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      background: "#000",
-                    }}
+            {/* Generate button */}
+            <button
+              onClick={generate}
+              disabled={loading || !imagePrompt.trim() || slideCount === 0}
+              className="w-full px-6 py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <span
+                    className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                    style={{ animation: "spin 0.6s linear infinite" }}
                   />
-                ) : (
-                  <>
-                    {slideshow.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={slideshow.image}
-                        alt={imagePrompt}
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background: "linear-gradient(to bottom, #27272a, #18181b)",
-                        }}
-                      />
-                    )}
+                  Generating…
+                </>
+              ) : (
+                "Generate slideshow"
+              )}
+            </button>
+
+            {/* Preview + Post (appears after generation) */}
+            {slideshow && (() => {
+              const previewCover = selectedBookId
+                ? books.find((b) => b.id === selectedBookId)?.coverImage
+                : undefined;
+              const previewTexts = previewCover && slideshow.texts.length > 2
+                ? slideshow.texts.slice(0, -1)
+                : slideshow.texts;
+              const totalPreviewSlides = previewTexts.length + (previewCover ? 1 : 0);
+              const isCoverSlide = previewCover && currentSlide === totalPreviewSlides - 1;
+
+              return (
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 sm:p-8">
+                  <div className="flex flex-col items-center">
+                    {/* Slide frame */}
                     <div
+                      className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-50"
                       style={{
-                        position: "absolute",
-                        inset: 0,
-                        background:
-                          "linear-gradient(to top, rgba(0,0,0,0.85) 15%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.4) 100%)",
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: "1.5rem",
+                        width: "min(100%, 320px)",
+                        aspectRatio: "9 / 16",
+                        maxHeight: "60vh",
                       }}
                     >
-                      <p
+                      {isCoverSlide ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={previewCover}
+                          alt="Book cover"
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            background: "#000",
+                          }}
+                        />
+                      ) : (
+                        <>
+                          {slideshow.image ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={slideshow.image}
+                              alt={imagePrompt}
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                background: "linear-gradient(to bottom, #27272a, #18181b)",
+                              }}
+                            />
+                          )}
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              background:
+                                "linear-gradient(to top, rgba(0,0,0,0.85) 15%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.4) 100%)",
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: "1.5rem",
+                            }}
+                          >
+                            <p
+                              style={{
+                                fontSize: "1.4rem",
+                                fontWeight: 700,
+                                lineHeight: 1.3,
+                                color: "white",
+                                textShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                                textAlign: "center",
+                              }}
+                            >
+                              {previewTexts[currentSlide]}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Prev / counter / Next */}
+                    <div className="flex items-center gap-4 mt-5">
+                      <button
+                        onClick={() => setCurrentSlide((i) => Math.max(0, i - 1))}
+                        disabled={currentSlide === 0}
+                        className="w-10 h-10 rounded-full border border-gray-300 text-gray-900 disabled:text-gray-300 disabled:border-gray-200 hover:bg-gray-200 transition-colors"
+                      >
+                        ‹
+                      </button>
+                      <div className="text-sm text-gray-400 tabular-nums">
+                        {currentSlide + 1} / {totalPreviewSlides}
+                      </div>
+                      <button
+                        onClick={() =>
+                          setCurrentSlide((i) =>
+                            Math.min(totalPreviewSlides - 1, i + 1)
+                          )
+                        }
+                        disabled={currentSlide === totalPreviewSlides - 1}
+                        className="w-10 h-10 rounded-full border border-gray-300 text-gray-900 disabled:text-gray-300 disabled:border-gray-200 hover:bg-gray-200 transition-colors"
+                      >
+                        ›
+                      </button>
+                    </div>
+
+                    {/* Dots */}
+                    <div className="flex gap-2 mt-4 flex-wrap justify-center">
+                      {Array.from({ length: totalPreviewSlides }).map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setCurrentSlide(i)}
+                          style={{
+                            width: i === currentSlide ? 24 : 8,
+                            height: 8,
+                            borderRadius: 4,
+                            border: "none",
+                            background:
+                              i === currentSlide ? "#3b82f6" : "rgba(0,0,0,0.15)",
+                            cursor: "pointer",
+                            transition: "all 0.3s",
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    {postStatus && (
+                      <div
+                        className={`mt-5 text-sm ${
+                          postStatus.includes("Posted") ? "text-green-500" : "text-red-500"
+                        }`}
+                      >
+                        {postStatus}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="mt-6 flex flex-wrap justify-center gap-3 w-full">
+                      <button
+                        onClick={() => {
+                          setSlideshow(null);
+                          setPostStatus(null);
+                          setCurrentSlide(0);
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
+                      >
+                        Clear preview
+                      </button>
+                      <button
+                        onClick={downloadAll}
+                        disabled={downloading}
+                        className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium disabled:opacity-50"
+                      >
+                        {downloading ? "Downloading…" : "Download all"}
+                      </button>
+                      <button
+                        onClick={postToTikTok}
+                        disabled={posting || accountId == null}
+                        className="px-5 py-2.5 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
                         style={{
-                          fontSize: "1.4rem",
-                          fontWeight: 700,
-                          lineHeight: 1.3,
-                          color: "white",
-                          textShadow: "0 2px 8px rgba(0,0,0,0.5)",
-                          textAlign: "center",
+                          background: "linear-gradient(135deg, #ff0050, #00f2ea)",
                         }}
                       >
-                        {previewTexts[currentSlide]}
-                      </p>
+                        {posting
+                          ? "Posting…"
+                          : accountId == null
+                          ? "Select account to post"
+                          : `Post to @${selectedAccount?.username ?? ""}`}
+                      </button>
                     </div>
-                  </>
-                )}
-              </div>
-
-              {/* Prev / counter / Next */}
-              <div className="flex items-center gap-4 mt-5">
-                <button
-                  onClick={() => setCurrentSlide((i) => Math.max(0, i - 1))}
-                  disabled={currentSlide === 0}
-                  className="w-10 h-10 rounded-full border border-gray-300 text-gray-900 disabled:text-gray-300 disabled:border-gray-200 hover:bg-gray-200 transition-colors"
-                >
-                  ‹
-                </button>
-                <div className="text-sm text-gray-400 tabular-nums">
-                  {currentSlide + 1} / {totalPreviewSlides}
+                  </div>
                 </div>
-                <button
-                  onClick={() =>
-                    setCurrentSlide((i) =>
-                      Math.min(totalPreviewSlides - 1, i + 1)
-                    )
-                  }
-                  disabled={currentSlide === totalPreviewSlides - 1}
-                  className="w-10 h-10 rounded-full border border-gray-300 text-gray-900 disabled:text-gray-300 disabled:border-gray-200 hover:bg-gray-200 transition-colors"
-                >
-                  ›
-                </button>
-              </div>
-
-              {/* Dots */}
-              <div className="flex gap-2 mt-4">
-                {Array.from({ length: totalPreviewSlides }).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCurrentSlide(i)}
-                    style={{
-                      width: i === currentSlide ? 24 : 8,
-                      height: 8,
-                      borderRadius: 4,
-                      border: "none",
-                      background:
-                        i === currentSlide ? "#3b82f6" : "rgba(0,0,0,0.15)",
-                      cursor: "pointer",
-                      transition: "all 0.3s",
-                    }}
-                  />
-                ))}
-              </div>
-
-              {postStatus && (
-                <div
-                  className={`mt-5 text-sm ${
-                    postStatus.includes("Posted") ? "text-green-500" : "text-red-500"
-                  }`}
-                >
-                  {postStatus}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="mt-6 flex flex-wrap justify-center gap-3 w-full">
-                <button
-                  onClick={() => {
-                    setSlideshow(null);
-                    setPostStatus(null);
-                    setCurrentSlide(0);
-                    setStep(1);
-                  }}
-                  className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
-                >
-                  ⌂ Home
-                </button>
-                <button
-                  onClick={() => setStep(2)}
-                  className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
-                >
-                  ← Edit
-                </button>
-                <button
-                  onClick={downloadAll}
-                  disabled={downloading}
-                  className="px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium disabled:opacity-50"
-                >
-                  {downloading ? "Downloading…" : "Download all"}
-                </button>
-                <button
-                  onClick={postToTikTok}
-                  disabled={posting}
-                  className="px-5 py-2.5 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
-                  style={{
-                    background: "linear-gradient(135deg, #ff0050, #00f2ea)",
-                  }}
-                >
-                  {posting
-                    ? "Posting…"
-                    : `Post to @${selectedAccount?.username ?? ""}`}
-                </button>
-              </div>
-            </div>
+              );
+            })()}
           </section>
-          );
-        })()}
+        )}
       </div>
 
       <style jsx>{`

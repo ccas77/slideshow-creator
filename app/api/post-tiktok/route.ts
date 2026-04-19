@@ -50,18 +50,29 @@ export async function GET(req: NextRequest) {
       const accountId = url.searchParams.get("accountId");
       const [postsResp, resultsResp] = await Promise.all([
         pbFetch("/v1/posts?limit=50"),
-        pbFetch("/v1/post-results").catch(() => ({ data: [] })),
+        pbFetch("/v1/post-results?limit=100").catch(() => ({ data: [] })),
       ]);
 
-      const videoUrls = new Map<string, string>();
+      // Build per-post result info (account-level profile URLs)
+      const postResults = new Map<string, Array<{
+        accountId: number;
+        username: string | null;
+        profileUrl: string | null;
+      }>>();
       for (const r of (resultsResp.data || []) as Array<{
         post_id: string;
-        platform_data?: { url?: string; username?: string };
+        social_account_id: number;
+        platform_data?: { url?: string; username?: string; id?: string };
       }>) {
         const pd = r.platform_data;
-        if (pd?.username) {
-          videoUrls.set(r.post_id, `https://www.tiktok.com/@${pd.username}`);
-        }
+        const entry = {
+          accountId: r.social_account_id,
+          username: pd?.username || null,
+          profileUrl: pd?.username ? `https://www.tiktok.com/@${pd.username}` : null,
+        };
+        const existing = postResults.get(r.post_id) || [];
+        existing.push(entry);
+        postResults.set(r.post_id, existing);
       }
 
       const all = (postsResp.data || []) as Array<{
@@ -69,6 +80,8 @@ export async function GET(req: NextRequest) {
         caption: string;
         status: string;
         scheduled_at: string | null;
+        created_at: string;
+        updated_at: string;
         social_accounts: number[];
         media: string[];
       }>;
@@ -93,15 +106,19 @@ export async function GET(req: NextRequest) {
           p.social_accounts.includes(Number(accountId))
         );
       }
-      const posts = visible.map((p) => ({
-        id: p.id,
-        caption: p.caption,
-        status: p.status,
-        scheduled_at: p.scheduled_at,
-        social_accounts: p.social_accounts,
-        slide_count: p.media?.length || 0,
-        videoUrl: videoUrls.get(p.id) || null,
-      }));
+      const posts = visible.map((p) => {
+        const results = postResults.get(p.id) || [];
+        return {
+          id: p.id,
+          caption: p.caption,
+          status: p.status,
+          scheduled_at: p.scheduled_at,
+          posted_at: p.status === "posted" ? (p.updated_at || p.created_at) : null,
+          social_accounts: p.social_accounts,
+          slide_count: p.media?.length || 0,
+          results,
+        };
+      });
       return NextResponse.json({ posts });
     }
 

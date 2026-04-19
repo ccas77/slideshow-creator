@@ -38,7 +38,8 @@ function gradientSvg(): string {
 
 export async function renderSlide(
   imageDataUrl: string | null,
-  text: string
+  text: string,
+  textStyle?: number
 ): Promise<Buffer> {
   const fontFile = ensureFont();
 
@@ -74,9 +75,9 @@ export async function renderSlide(
   const escaped = escapeMarkup(text);
   const fontSize = 36;
   const pSize = fontSize * 1024;
-  const textStyle = Math.floor(Math.random() * 3);
+  const resolvedStyle = textStyle ?? Math.floor(Math.random() * 3);
 
-  if (textStyle === 0) {
+  if (resolvedStyle === 0) {
     // Style 1: White text with black outline
     const strokeMarkup = `<span foreground="black" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
     const strokePng = await sharp({
@@ -104,7 +105,7 @@ export async function renderSlide(
       ])
       .png()
       .toBuffer();
-  } else if (textStyle === 1) {
+  } else if (resolvedStyle === 1) {
     // Style 2: White text with 50% opacity background shadow
     const textMarkup = `<span foreground="white" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
     const textPng = await sharp({
