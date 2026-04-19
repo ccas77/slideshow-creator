@@ -12,14 +12,15 @@ interface PublicUser {
   allowedAccountIds: number[];
 }
 
-interface TikTokAccount {
+interface SocialAccount {
   id: number;
   username: string;
+  platform: string;
 }
 
 export default function AdminPage() {
   const [users, setUsers] = useState<PublicUser[]>([]);
-  const [accounts, setAccounts] = useState<TikTokAccount[]>([]);
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
@@ -220,9 +221,10 @@ export default function AdminPage() {
           ) : (
             <ul className="divide-y divide-gray-200/60">
               {users.map((u) => {
-                const allowedUsernames = u.allowedAccountIds
-                  .map((id) => accounts.find((a) => a.id === id)?.username)
-                  .filter(Boolean) as string[];
+                const allowedAccounts = u.allowedAccountIds
+                  .map((id) => accounts.find((a) => a.id === id))
+                  .filter(Boolean) as SocialAccount[];
+                const allowedUsernames = allowedAccounts.map((a) => a.username);
                 return (
                   <li key={u.id} className="px-5 py-3">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -296,39 +298,52 @@ export default function AdminPage() {
                 </button>
               </div>
               <p className="text-sm text-gray-500 mb-4">
-                Check every TikTok account this user is allowed to post to.
+                Check every account this user is allowed to access.
                 Unchecked accounts are hidden from them entirely.
               </p>
               {accounts.length === 0 ? (
                 <p className="text-sm text-gray-500">
-                  No TikTok accounts returned by PostBridge.
+                  No accounts returned by PostBridge.
                 </p>
               ) : (
-                <div className="space-y-2 mb-4">
-                  {accounts.map((a) => {
-                    const checked = editAccessIds.includes(a.id);
-                    return (
-                      <label
-                        key={a.id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                          checked
-                            ? "border-blue-500/50 bg-blue-50"
-                            : "border-gray-200 bg-gray-50"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleAccess(a.id)}
-                          className="accent-blue-500 rounded"
-                        />
-                        <span className="text-sm text-gray-900">@{a.username}</span>
-                        <span className="text-[10px] text-gray-400 ml-auto">
-                          ID: {a.id}
-                        </span>
-                      </label>
-                    );
-                  })}
+                <div className="space-y-4 mb-4">
+                  {["tiktok", "instagram", "facebook"]
+                    .filter((p) => accounts.some((a) => a.platform === p))
+                    .map((platform) => (
+                    <div key={platform}>
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                        {platform}
+                      </h3>
+                      <div className="space-y-2">
+                        {accounts
+                          .filter((a) => a.platform === platform)
+                          .map((a) => {
+                            const checked = editAccessIds.includes(a.id);
+                            return (
+                              <label
+                                key={a.id}
+                                className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                                  checked
+                                    ? "border-blue-500/50 bg-blue-50"
+                                    : "border-gray-200 bg-gray-50"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleAccess(a.id)}
+                                  className="accent-blue-500 rounded"
+                                />
+                                <span className="text-sm text-gray-900">@{a.username}</span>
+                                <span className="text-[10px] text-gray-400 ml-auto">
+                                  ID: {a.id}
+                                </span>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
               <button

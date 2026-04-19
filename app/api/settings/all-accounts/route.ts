@@ -8,26 +8,26 @@ export async function GET(req: NextRequest) {
   if (error) return error;
 
   try {
-    const res = await fetch(
-      `${PB_BASE}/v1/social-accounts?platform=tiktok&limit=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.POSTBRIDGE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+    const platforms = ["tiktok", "instagram", "facebook"];
+    const responses = await Promise.all(
+      platforms.map((p) =>
+        fetch(`${PB_BASE}/v1/social-accounts?platform=${p}&limit=100`, {
+          headers: {
+            Authorization: `Bearer ${process.env.POSTBRIDGE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        })
+      )
+    );
+    const accounts: Array<{ id: number; username: string; platform: string }> = [];
+    for (let i = 0; i < platforms.length; i++) {
+      const res = responses[i];
+      if (!res.ok) continue;
+      const data = await res.json();
+      for (const a of data.data || []) {
+        accounts.push({ id: a.id, username: a.username, platform: platforms[i] });
       }
-    );
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`post-bridge ${res.status}: ${body}`);
     }
-    const data = await res.json();
-    const accounts = (data.data || []).map(
-      (a: { id: number; username: string }) => ({
-        id: a.id,
-        username: a.username,
-      })
-    );
     return NextResponse.json({ accounts });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed";
