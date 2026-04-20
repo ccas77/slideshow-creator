@@ -393,6 +393,7 @@ export async function GET(req: NextRequest) {
                 listId: selectedList.id,
                 accountIds: [Number(accIdStr)],
                 scheduledAt: scheduledAt.toISOString(),
+                platform: accConfig.platform,
               });
               topNResults.push({
                 userId: user.id,

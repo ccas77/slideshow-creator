@@ -57,6 +57,30 @@ export async function uploadPng(
   return upload.media_id;
 }
 
+export async function uploadVideo(
+  buffer: Buffer,
+  name: string
+): Promise<string> {
+  const upload = await pbFetch("/v1/media/create-upload-url", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      mime_type: "video/mp4",
+      size_bytes: buffer.length,
+    }),
+  });
+  const putRes = await fetch(upload.upload_url, {
+    method: "PUT",
+    headers: { "Content-Type": "video/mp4" },
+    body: new Uint8Array(buffer),
+  });
+  if (!putRes.ok) {
+    const t = await putRes.text();
+    throw new Error(`S3 video upload failed: ${putRes.status} ${t}`);
+  }
+  return upload.media_id;
+}
+
 /**
  * Returns ALL TikTok accounts from PostBridge (unfiltered).
  * Callers are responsible for filtering by per-user allowedAccountIds.

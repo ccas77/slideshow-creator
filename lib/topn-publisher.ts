@@ -1,7 +1,8 @@
 import { TopBook, TopNList, getTopBooks, getTopNLists } from "@/lib/kv";
 import { generateImage } from "@/lib/gemini";
 import { renderTitleSlide, renderBookSlide } from "@/lib/render-topn-slide";
-import { uploadPng, pbFetch } from "@/lib/post-bridge";
+import { uploadPng, uploadVideo, pbFetch } from "@/lib/post-bridge";
+import { renderVideo } from "@/lib/render-video";
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -17,6 +18,7 @@ export interface PublishTopNOptions {
   listId: string;
   accountIds: number[];
   scheduledAt?: string; // ISO string
+  platform?: "tiktok-carousel" | "tiktok-video" | "fb-video" | "ig-carousel" | "ig-video";
 }
 
 export interface PublishTopNResult {
@@ -81,23 +83,40 @@ export async function publishTopN(
     slideBufs.push(buf);
   }
 
+  const isVideo = opts.platform === "tiktok-video" || opts.platform === "fb-video" || opts.platform === "ig-video";
+
   const mediaIds: string[] = [];
-  for (let j = 0; j < slideBufs.length; j++) {
-    const mediaId = await uploadPng(slideBufs[j], `topn-slide-${j}.png`);
+  if (isVideo) {
+    const videoBuf = await renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2 });
+    const mediaId = await uploadVideo(videoBuf, "topn-video.mp4");
     mediaIds.push(mediaId);
+  } else {
+    for (let j = 0; j < slideBufs.length; j++) {
+      const mediaId = await uploadPng(slideBufs[j], `topn-slide-${j}.png`);
+      mediaIds.push(mediaId);
+    }
   }
 
   const captions = list.captions && list.captions.length > 0 ? list.captions : [""];
   const caption = captions[Math.floor(Math.random() * captions.length)];
 
+  const platformConfigurations: Record<string, unknown> = {};
+  if (opts.platform === "tiktok-video" || opts.platform === "tiktok-carousel") {
+    platformConfigurations.tiktok = { draft: false, is_aigc: true };
+  } else if (opts.platform === "ig-carousel" || opts.platform === "ig-video") {
+    platformConfigurations.instagram = {};
+  } else if (opts.platform === "fb-video") {
+    platformConfigurations.facebook = {};
+  } else {
+    platformConfigurations.tiktok = { draft: false, is_aigc: true };
+    platformConfigurations.instagram = {};
+  }
+
   const postBody: Record<string, unknown> = {
     caption,
     media: mediaIds,
     social_accounts: accountIds,
-    platform_configurations: {
-      tiktok: { draft: false, is_aigc: true },
-      instagram: {},
-    },
+    platform_configurations: platformConfigurations,
   };
   if (scheduledAt) postBody.scheduled_at = scheduledAt;
 
