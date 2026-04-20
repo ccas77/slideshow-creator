@@ -119,7 +119,10 @@ export default function InstagramPage() {
       if (booksRes.ok) setBooks((await booksRes.json()).books || []);
       if (ttRes.ok) setAccounts((await ttRes.json()).accounts || []);
       if (igAccRes.ok) setIgAccounts((await igAccRes.json()).accounts || []);
-      if (autoRes.ok) setAutoConfig((await autoRes.json()).config);
+      if (autoRes.ok) {
+        const raw = (await autoRes.json()).config;
+        setAutoConfig({ enabled: raw?.enabled ?? false, accounts: raw?.accounts ?? {} });
+      }
     } catch (e) {
       console.error("Load error:", e);
     }
