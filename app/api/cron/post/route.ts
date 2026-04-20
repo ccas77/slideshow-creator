@@ -5,6 +5,8 @@ import {
   getBooks,
   getAppSettings,
   getTopNLists,
+  getTopNAutomation,
+  setTopNAutomation,
   getIgAutomation,
   getIgSlideshows,
   setIgAutomation,
@@ -340,7 +342,7 @@ export async function GET(req: NextRequest) {
       } catch {}
     }
 
-    // Phase 5: Top N list automation (sequential per user/list — sharp Pango)
+    // Phase 5: Top N list automation — per-account round-robin (sequential — sharp Pango)
     const topNResults: Array<{
       userId: string;
       listName: string;
@@ -349,63 +351,80 @@ export async function GET(req: NextRequest) {
 
     for (const user of users) {
       try {
-        const [lists, settings] = await Promise.all([
+        const [topNLists, topNAuto] = await Promise.all([
           getTopNLists(user.id),
-          getAppSettings(user.id),
+          getTopNAutomation(user.id),
         ]);
-        const allowedIds = settings.allowedAccountIds;
+        const today = new Date().toISOString().slice(0, 10);
+        let topNUpdated = false;
+        const updatedTopNAccounts = { ...topNAuto.accounts };
 
-        for (const list of lists) {
-          const auto = list.automation;
-          if (!auto || !auto.enabled) continue;
-          // Merge all account groups
-          const allAutoAccountIds = [
-            ...(auto.accountIds || []),
-            ...(auto.videoAccountIds || []),
-            ...(auto.fbAccountIds || []),
-            ...(auto.igCarouselAccountIds || []),
-            ...(auto.igVideoAccountIds || []),
-          ];
-          if (allAutoAccountIds.length === 0) continue;
-          if (!auto.intervals || auto.intervals.length === 0) continue;
+        for (const [accIdStr, accConfig] of Object.entries(topNAuto.accounts)) {
+          if (!accConfig.enabled || accConfig.intervals.length === 0) continue;
 
-          // Filter automation accounts by user's currently allowed accounts
-          const targetAccountIds =
-            allowedIds && allowedIds.length > 0
-              ? allAutoAccountIds.filter((id) => allowedIds.includes(id))
-              : allAutoAccountIds;
-          if (targetAccountIds.length === 0) continue;
+          // Frequency check
+          if (accConfig.lastPostDate) {
+            const lastDate = new Date(accConfig.lastPostDate + "T00:00:00Z");
+            const todayDate = new Date(today + "T00:00:00Z");
+            const daysSince = Math.floor((todayDate.getTime() - lastDate.getTime()) / 86400000);
+            if (daysSince < accConfig.frequencyDays) continue;
+          }
 
-          for (const win of auto.intervals) {
-            if (!shouldProcessWindow(win.start)) continue;
+          // Build eligible list pool
+          let pool = topNLists.filter((l) => l.bookIds.length > 0);
+          if (accConfig.listIds.length > 0) {
+            pool = pool.filter((l) => accConfig.listIds.includes(l.id));
+          }
+          if (pool.length === 0) continue;
+
+          // Check if any window is active this hour
+          const activeWindows = accConfig.intervals.filter((w) => shouldProcessWindow(w.start));
+          if (activeWindows.length === 0) continue;
+
+          // Round-robin: pick one list
+          const listIndex = accConfig.pointer % pool.length;
+          const selectedList = pool[listIndex];
+
+          for (const win of activeWindows) {
             try {
               const scheduledAt = randomTimeInWindow(win.start, win.end);
               const r = await publishTopN({
                 userId: user.id,
-                listId: list.id,
-                accountIds: targetAccountIds,
+                listId: selectedList.id,
+                accountIds: [Number(accIdStr)],
                 scheduledAt: scheduledAt.toISOString(),
               });
               topNResults.push({
                 userId: user.id,
-                listName: list.name,
-                status: `scheduled ${r.slides} slides for ${scheduledAt.toISOString()} [post:${r.postId}]`,
+                listName: selectedList.name,
+                status: `${accIdStr}: scheduled ${r.slides} slides for ${scheduledAt.toISOString()} [post:${r.postId}]`,
               });
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
               topNResults.push({
                 userId: user.id,
-                listName: list.name,
-                status: `error: ${msg}`,
+                listName: selectedList.name,
+                status: `error (${accIdStr}): ${msg}`,
               });
             }
           }
+
+          updatedTopNAccounts[accIdStr] = {
+            ...accConfig,
+            pointer: accConfig.pointer + 1,
+            lastPostDate: today,
+          };
+          topNUpdated = true;
+        }
+
+        if (topNUpdated) {
+          await setTopNAutomation(user.id, { accounts: updatedTopNAccounts });
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         topNResults.push({
           userId: user.id,
-          listName: "(list fetch)",
+          listName: "(topn-auto)",
           status: `error: ${msg}`,
         });
       }

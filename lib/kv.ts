@@ -285,6 +285,33 @@ export async function setTopNLists(
   await redis.set(topNListsKey(userId), lists);
 }
 
+// ── Top N Per-Account Automation (per-user) ──
+
+export interface TopNAccountConfig {
+  enabled: boolean;
+  intervals: TimeWindow[];
+  listIds: string[];       // which lists to rotate through (empty = all)
+  pointer: number;         // round-robin index
+  frequencyDays: number;   // post every N days (1 = daily)
+  lastPostDate?: string;   // YYYY-MM-DD of last successful post
+  platform: "tiktok-carousel" | "tiktok-video" | "fb-video" | "ig-carousel" | "ig-video";
+}
+
+export interface TopNGlobalAutomation {
+  accounts: Record<string, TopNAccountConfig>;
+}
+
+const topnAutomationKey = (userId: string) => `u:${userId}:topn-automation`;
+
+export async function getTopNAutomation(userId: string): Promise<TopNGlobalAutomation> {
+  const data = await redis.get<TopNGlobalAutomation>(topnAutomationKey(userId));
+  return data ?? { accounts: {} };
+}
+
+export async function setTopNAutomation(userId: string, config: TopNGlobalAutomation): Promise<void> {
+  await redis.set(topnAutomationKey(userId), config);
+}
+
 // ── Instagram Slideshows (per-user) ──
 
 export interface InstagramSlideshow {
