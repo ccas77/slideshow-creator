@@ -941,13 +941,12 @@ export default function InstagramPage() {
                       </div>
                     </div>
 
-                    {/* Slideshows */}
+                    {/* Slideshows — only visible after selecting at least one book */}
+                    {currentConfig.bookIds.length > 0 && (
                     <div>
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Slideshows</h4>
                       {(() => {
-                        const pool = currentConfig.bookIds.length > 0
-                          ? igSlideshows.filter((s) => s.sourceBookId && currentConfig.bookIds.includes(s.sourceBookId))
-                          : igSlideshows;
+                        const pool = igSlideshows.filter((s) => s.sourceBookId && currentConfig.bookIds.includes(s.sourceBookId));
                         return pool.length === 0 ? (
                           <p className="text-xs text-gray-400">No slideshows available for selected books.</p>
                         ) : (
@@ -977,6 +976,7 @@ export default function InstagramPage() {
                         );
                       })()}
                     </div>
+                    )}
 
                     {/* Time windows */}
                     <div>
