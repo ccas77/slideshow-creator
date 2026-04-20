@@ -928,10 +928,18 @@ export default function InstagramPage() {
                               type="checkbox"
                               checked={currentConfig.bookIds.includes(b.id)}
                               onChange={() => {
-                                const next = currentConfig.bookIds.includes(b.id)
+                                const removing = currentConfig.bookIds.includes(b.id);
+                                const next = removing
                                   ? currentConfig.bookIds.filter((x) => x !== b.id)
                                   : [...currentConfig.bookIds, b.id];
-                                updateAccConfig({ bookIds: next, slideshowIds: [] });
+                                // Only drop slideshows that belonged to the removed book
+                                const nextSlideshows = removing
+                                  ? currentConfig.slideshowIds.filter((sid) => {
+                                      const ss = igSlideshows.find((s) => s.id === sid);
+                                      return ss?.sourceBookId !== b.id;
+                                    })
+                                  : currentConfig.slideshowIds;
+                                updateAccConfig({ bookIds: next, slideshowIds: nextSlideshows });
                               }}
                               className="accent-blue-500 w-3.5 h-3.5"
                             />
