@@ -400,7 +400,7 @@ export async function GET(req: NextRequest) {
     for (const user of users) {
       try {
         const igAuto = await getIgAutomation(user.id);
-        if (!igAuto.enabled || !igAuto.accounts) continue;
+        if (!igAuto.accounts || Object.keys(igAuto.accounts).length === 0) continue;
 
         const igSlideshows = await getIgSlideshows(user.id);
         if (igSlideshows.length === 0) continue;

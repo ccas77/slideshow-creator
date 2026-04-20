@@ -333,7 +333,7 @@ export default function InstagramPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "slideshows", label: `Slideshows (${igSlideshows.length})` },
     { key: "import", label: "Import" },
-    { key: "automation", label: autoConfig.enabled ? "Automation (On)" : "Automation" },
+    { key: "automation", label: (() => { const count = Object.values(autoConfig.accounts).filter((c) => c.enabled).length; return count > 0 ? `Automation (${count})` : "Automation"; })() },
   ];
 
   return (
@@ -862,19 +862,10 @@ export default function InstagramPage() {
 
               return (
               <div className="space-y-4">
-                {/* Master toggle */}
+                {/* Summary */}
                 <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoConfig.enabled}
-                      onChange={(e) => setAutoConfig({ ...autoConfig, enabled: e.target.checked })}
-                      className="accent-blue-500 w-4 h-4"
-                    />
-                    <span className="text-sm font-medium text-gray-900">Enable IG automation</span>
-                  </label>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {configuredCount} account{configuredCount !== 1 ? "s" : ""} configured. Each account round-robins through its assigned slideshows.
+                  <p className="text-xs text-gray-500">
+                    {configuredCount} account{configuredCount !== 1 ? "s" : ""} enabled. Each account round-robins through its assigned slideshows.
                   </p>
                 </div>
 
