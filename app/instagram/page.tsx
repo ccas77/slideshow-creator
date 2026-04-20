@@ -45,12 +45,21 @@ interface InstagramSlideshow {
   captions: NamedItem[];
 }
 
+interface IgAccountConfig {
+  enabled: boolean;
+  intervals: TimeWindow[];
+  bookIds: string[];
+  slideshowIds: string[];
+  pointer: number;
+}
+
 interface IgGlobalAutomation {
   enabled: boolean;
-  igAccountIds: number[];
-  tiktokAccountIds: number[];
-  intervals: TimeWindow[];
-  igPointer: number;
+  accounts: Record<string, IgAccountConfig>;
+  igAccountIds?: number[];
+  tiktokAccountIds?: number[];
+  intervals?: TimeWindow[];
+  igPointer?: number;
   accountBookIds?: Record<string, string[]>;
 }
 
@@ -89,11 +98,9 @@ export default function InstagramPage() {
   // Automation
   const [autoConfig, setAutoConfig] = useState<IgGlobalAutomation>({
     enabled: false,
-    igAccountIds: [],
-    tiktokAccountIds: [],
-    intervals: [{ start: "18:00", end: "20:00" }],
-    igPointer: 0,
+    accounts: {},
   });
+  const [selectedAutoAccount, setSelectedAutoAccount] = useState<string>("");
   const [autoSaved, setAutoSaved] = useState(false);
   const [previewSlideshow, setPreviewSlideshow] = useState<InstagramSlideshow | null>(null);
   const [expandedBooks, setExpandedBooks] = useState<Set<string>>(new Set());
@@ -836,9 +843,23 @@ export default function InstagramPage() {
             )}
 
             {/* ═══ Automation Tab ═══ */}
-            {tab === "automation" && (
+            {tab === "automation" && (() => {
+              const allAccs = [...igAccounts.map((a) => ({ ...a, platform: "instagram" as const })), ...accounts.map((a) => ({ ...a, platform: "tiktok" as const }))];
+              const selConfig = selectedAutoAccount ? autoConfig.accounts[selectedAutoAccount] : null;
+              const updateAccConfig = (patch: Partial<IgAccountConfig>) => {
+                if (!selectedAutoAccount) return;
+                const current = autoConfig.accounts[selectedAutoAccount] || { enabled: false, intervals: [{ start: "18:00", end: "20:00" }], bookIds: [], slideshowIds: [], pointer: 0 };
+                setAutoConfig({
+                  ...autoConfig,
+                  accounts: { ...autoConfig.accounts, [selectedAutoAccount]: { ...current, ...patch } },
+                });
+              };
+              const currentConfig = selConfig || { enabled: false, intervals: [{ start: "18:00", end: "20:00" }], bookIds: [], slideshowIds: [], pointer: 0 };
+              const configuredCount = Object.values(autoConfig.accounts).filter((c) => c.enabled).length;
+
+              return (
               <div className="space-y-4">
-                {/* Enable toggle */}
+                {/* Master toggle */}
                 <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input
@@ -847,195 +868,152 @@ export default function InstagramPage() {
                       onChange={(e) => setAutoConfig({ ...autoConfig, enabled: e.target.checked })}
                       className="accent-blue-500 w-4 h-4"
                     />
-                    <span className="text-sm font-medium text-gray-900">Enable daily automation</span>
+                    <span className="text-sm font-medium text-gray-900">Enable IG automation</span>
                   </label>
                   <p className="text-xs text-gray-500 mt-2">
-                    Round-robins through all slideshows. IG gets one carousel per day.
-                    Each TikTok account gets a different slideshow as video, no duplicates.
+                    {configuredCount} account{configuredCount !== 1 ? "s" : ""} configured. Each account round-robins through its assigned slideshows.
                   </p>
                 </div>
 
-                {/* Queue preview */}
+                {/* Account selector */}
                 <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Slideshow Queue ({igSlideshows.length})</h3>
-                  {igSlideshows.length === 0 ? (
-                    <p className="text-xs text-gray-400">No slideshows. Import some first.</p>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Configure Account</h3>
+                  {allAccs.length === 0 ? (
+                    <p className="text-xs text-gray-400">No accounts connected in PostBridge.</p>
                   ) : (
-                    <div className="space-y-1">
-                      {igSlideshows.map((s, i) => (
-                        <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-gray-50">
-                          <span className={`text-xs w-5 text-center font-mono ${i === autoConfig.igPointer % igSlideshows.length ? "text-green-500 font-bold" : "text-gray-400"}`}>
-                            {i === autoConfig.igPointer % igSlideshows.length ? "→" : (i + 1)}
-                          </span>
-                          <span className="text-sm text-gray-700 truncate flex-1">{s.name}</span>
-                          <span className="text-[10px] text-gray-400">{s.imagePrompts.length} prompts · {s.captions.length} captions</span>
-                        </div>
-                      ))}
-                    </div>
+                    <select
+                      value={selectedAutoAccount}
+                      onChange={(e) => setSelectedAutoAccount(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    >
+                      <option value="">Select an account…</option>
+                      {allAccs.map((a) => {
+                        const cfg = autoConfig.accounts[String(a.id)];
+                        return (
+                          <option key={a.id} value={String(a.id)}>
+                            @{a.username} ({a.platform}){cfg?.enabled ? " ✓" : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
                   )}
                 </div>
 
-                {/* Accounts */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Instagram Accounts</h3>
-                    {igAccounts.length === 0 ? (
-                      <p className="text-xs text-gray-400">No IG accounts connected in PostBridge.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {igAccounts.map((a) => {
-                          const isSelected = autoConfig.igAccountIds.includes(a.id);
-                          const accBookIds = autoConfig.accountBookIds?.[String(a.id)] || [];
-                          return (
-                            <div key={a.id} className="rounded-xl border border-gray-100 bg-gray-50/50 p-3">
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() =>
-                                    setAutoConfig({
-                                      ...autoConfig,
-                                      igAccountIds: isSelected
-                                        ? autoConfig.igAccountIds.filter((x) => x !== a.id)
-                                        : [...autoConfig.igAccountIds, a.id],
-                                    })
-                                  }
-                                  className="accent-blue-500"
-                                />
-                                <span className="text-sm font-medium text-gray-700">@{a.username}</span>
-                              </label>
-                              {isSelected && books.length > 0 && (
-                                <div className="mt-2 ml-6">
-                                  <p className="text-[11px] text-gray-400 mb-1">
-                                    {accBookIds.length === 0 ? "Posts from all books" : `Filtered to ${accBookIds.length} book(s)`}
-                                  </p>
-                                  <div className="space-y-0.5">
-                                    {books.map((b) => (
-                                      <label key={b.id} className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-white cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={accBookIds.includes(b.id)}
-                                          onChange={() => {
-                                            const current = autoConfig.accountBookIds || {};
-                                            const ids = current[String(a.id)] || [];
-                                            const next = ids.includes(b.id)
-                                              ? ids.filter((x) => x !== b.id)
-                                              : [...ids, b.id];
-                                            setAutoConfig({
-                                              ...autoConfig,
-                                              accountBookIds: { ...current, [String(a.id)]: next },
-                                            });
-                                          }}
-                                          className="accent-blue-500 w-3 h-3"
-                                        />
-                                        <span className="text-xs text-gray-600">{b.name}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                {/* Per-account config */}
+                {selectedAutoAccount && (
+                  <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6 space-y-5">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={currentConfig.enabled}
+                        onChange={(e) => updateAccConfig({ enabled: e.target.checked })}
+                        className="accent-blue-500 w-4 h-4"
+                      />
+                      <span className="text-sm font-medium text-gray-900">Enable for this account</span>
+                    </label>
 
-                  <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-1">TikTok Accounts</h3>
-                    <p className="text-[11px] text-gray-400 mb-3">Each gets a different slideshow as video</p>
-                    {accounts.length === 0 ? (
-                      <p className="text-xs text-gray-400">No TikTok accounts available.</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {accounts.map((a) => (
-                          <label key={a.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    {/* Books */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Books</h4>
+                      <p className="text-[11px] text-gray-400 mb-2">
+                        {currentConfig.bookIds.length === 0 ? "All books (none selected = all)" : `${currentConfig.bookIds.length} selected`}
+                      </p>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {books.map((b) => (
+                          <label key={b.id} className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={autoConfig.tiktokAccountIds.includes(a.id)}
-                              onChange={() =>
-                                setAutoConfig({
-                                  ...autoConfig,
-                                  tiktokAccountIds: autoConfig.tiktokAccountIds.includes(a.id)
-                                    ? autoConfig.tiktokAccountIds.filter((x) => x !== a.id)
-                                    : [...autoConfig.tiktokAccountIds, a.id],
-                                })
-                              }
-                              className="accent-blue-500"
+                              checked={currentConfig.bookIds.includes(b.id)}
+                              onChange={() => {
+                                const next = currentConfig.bookIds.includes(b.id)
+                                  ? currentConfig.bookIds.filter((x) => x !== b.id)
+                                  : [...currentConfig.bookIds, b.id];
+                                updateAccConfig({ bookIds: next, slideshowIds: [] });
+                              }}
+                              className="accent-blue-500 w-3.5 h-3.5"
                             />
-                            <span className="text-sm text-gray-700">@{a.username}</span>
+                            <span className="text-sm text-gray-700">{b.name}</span>
                           </label>
                         ))}
                       </div>
-                    )}
-                  </div>
-                </div>
+                    </div>
 
-                {/* Time windows */}
-                <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Posting Windows (UTC)</h3>
-                  <div className="space-y-2 mb-3">
-                    {autoConfig.intervals.map((w, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <input
-                          type="time"
-                          value={w.start}
-                          onChange={(e) =>
-                            setAutoConfig({
-                              ...autoConfig,
-                              intervals: autoConfig.intervals.map((x, j) =>
-                                j === i ? { ...x, start: e.target.value } : x
-                              ),
-                            })
-                          }
-                          className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                        />
-                        <span className="text-xs text-gray-400">→</span>
-                        <input
-                          type="time"
-                          value={w.end}
-                          onChange={(e) =>
-                            setAutoConfig({
-                              ...autoConfig,
-                              intervals: autoConfig.intervals.map((x, j) =>
-                                j === i ? { ...x, end: e.target.value } : x
-                              ),
-                            })
-                          }
-                          className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                        />
-                        {autoConfig.intervals.length > 1 && (
-                          <button
-                            onClick={() =>
-                              setAutoConfig({
-                                ...autoConfig,
-                                intervals: autoConfig.intervals.filter((_, j) => j !== i),
-                              })
-                            }
-                            className="text-xs text-red-500 hover:text-red-600"
-                          >
-                            Remove
-                          </button>
-                        )}
+                    {/* Slideshows */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Slideshows</h4>
+                      {(() => {
+                        const pool = currentConfig.bookIds.length > 0
+                          ? igSlideshows.filter((s) => s.sourceBookId && currentConfig.bookIds.includes(s.sourceBookId))
+                          : igSlideshows;
+                        return pool.length === 0 ? (
+                          <p className="text-xs text-gray-400">No slideshows available for selected books.</p>
+                        ) : (
+                          <>
+                            <p className="text-[11px] text-gray-400 mb-2">
+                              {currentConfig.slideshowIds.length === 0 ? `All ${pool.length} slideshows` : `${currentConfig.slideshowIds.length} of ${pool.length} selected`}
+                            </p>
+                            <div className="space-y-1 max-h-48 overflow-y-auto">
+                              {pool.map((s) => (
+                                <label key={s.id} className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={currentConfig.slideshowIds.includes(s.id)}
+                                    onChange={() => {
+                                      const next = currentConfig.slideshowIds.includes(s.id)
+                                        ? currentConfig.slideshowIds.filter((x) => x !== s.id)
+                                        : [...currentConfig.slideshowIds, s.id];
+                                      updateAccConfig({ slideshowIds: next });
+                                    }}
+                                    className="accent-blue-500 w-3.5 h-3.5"
+                                  />
+                                  <span className="text-sm text-gray-700 truncate">{s.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Time windows */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Posting Windows (UTC)</h4>
+                      <div className="space-y-2 mb-3">
+                        {currentConfig.intervals.map((w, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <input
+                              type="time"
+                              value={w.start}
+                              onChange={(e) => updateAccConfig({ intervals: currentConfig.intervals.map((x, j) => j === i ? { ...x, start: e.target.value } : x) })}
+                              className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                            />
+                            <span className="text-xs text-gray-400">→</span>
+                            <input
+                              type="time"
+                              value={w.end}
+                              onChange={(e) => updateAccConfig({ intervals: currentConfig.intervals.map((x, j) => j === i ? { ...x, end: e.target.value } : x) })}
+                              className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                            />
+                            {currentConfig.intervals.length > 1 && (
+                              <button
+                                onClick={() => updateAccConfig({ intervals: currentConfig.intervals.filter((_, j) => j !== i) })}
+                                className="text-xs text-red-500 hover:text-red-600"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                      <button
+                        onClick={() => updateAccConfig({ intervals: [...currentConfig.intervals, { start: "12:00", end: "14:00" }] })}
+                        className="text-xs text-blue-500 hover:text-blue-600"
+                      >
+                        + Add window
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() =>
-                      setAutoConfig({
-                        ...autoConfig,
-                        intervals: [...autoConfig.intervals, { start: "12:00", end: "14:00" }],
-                      })
-                    }
-                    className="text-xs text-blue-500 hover:text-blue-600"
-                  >
-                    + Add window
-                  </button>
-                  <p className="text-[11px] text-gray-400 mt-2">
-                    One post per window per day. IG round-robins through slideshows.
-                    Each TikTok account gets a different random slideshow per window.
-                  </p>
-                </div>
+                )}
 
                 {/* Save */}
                 <div className="flex items-center gap-3">
@@ -1048,7 +1026,8 @@ export default function InstagramPage() {
                   {autoSaved && <span className="text-xs text-green-500">Saved</span>}
                 </div>
               </div>
-            )}
+              );
+            })()}
           </>
         )}
         {/* Slide Preview Modal */}

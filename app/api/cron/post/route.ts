@@ -395,47 +395,51 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Phase 6: IG slideshow automation per user (sequential — sharp Pango)
+    // Phase 6: IG slideshow automation — per-account config (sequential — sharp Pango)
     const igAutoResults: Array<{ userId: string; status: string }> = [];
     for (const user of users) {
       try {
         const igAuto = await getIgAutomation(user.id);
+        if (!igAuto.enabled || !igAuto.accounts) continue;
+
         const igSlideshows = await getIgSlideshows(user.id);
-        if (!igAuto.enabled || igAuto.intervals.length === 0 || igSlideshows.length === 0) continue;
+        if (igSlideshows.length === 0) continue;
 
         const settings = await getAppSettings(user.id);
         const allowedIds = settings.allowedAccountIds;
-        let pointer = igAuto.igPointer;
+        let updated = false;
+        const updatedAccounts = { ...igAuto.accounts };
 
-        for (const win of igAuto.intervals) {
-          // IG accounts: each gets a carousel via round-robin
-          for (const igAccId of igAuto.igAccountIds) {
-            if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(igAccId)) continue;
+        for (const [accIdStr, accConfig] of Object.entries(igAuto.accounts)) {
+          if (!accConfig.enabled || accConfig.intervals.length === 0) continue;
+          const accId = Number(accIdStr);
+          if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(accId)) continue;
 
-            const allowedBookIds = igAuto.accountBookIds?.[String(igAccId)];
-            const pool =
-              allowedBookIds && allowedBookIds.length > 0
-                ? igSlideshows.filter(
-                    (s) => s.sourceBookId && allowedBookIds.includes(s.sourceBookId)
-                  )
-                : igSlideshows;
-            if (pool.length === 0) continue;
+          // Build pool: filter by books, then by specific slideshows
+          let pool = igSlideshows;
+          if (accConfig.bookIds.length > 0) {
+            pool = pool.filter((s) => s.sourceBookId && accConfig.bookIds.includes(s.sourceBookId));
+          }
+          if (accConfig.slideshowIds.length > 0) {
+            pool = pool.filter((s) => accConfig.slideshowIds.includes(s.id));
+          }
+          if (pool.length === 0) continue;
 
+          let pointer = accConfig.pointer;
+
+          for (const win of accConfig.intervals) {
             const ss = pool[pointer % pool.length];
             const prompt = pickRandom(ss.imagePrompts);
             const caption = pickRandom(ss.captions);
             if (!prompt) continue;
 
-            const texts = ss.slideTexts
-              .split("\n")
-              .map((t) => t.trim())
-              .filter(Boolean);
+            const texts = ss.slideTexts.split("\n").map((t) => t.trim()).filter(Boolean);
             if (texts.length < 2) continue;
 
             try {
               const image = await generateImage(prompt.value);
               if (!image) {
-                igAutoResults.push({ userId: user.id, status: `IG skip: image gen failed for ${ss.name}` });
+                igAutoResults.push({ userId: user.id, status: `skip: image gen failed for ${ss.name} (${accIdStr})` });
                 continue;
               }
               const slideBufs: Buffer[] = [];
@@ -445,8 +449,14 @@ export async function GET(req: NextRequest) {
               }
               const mediaIds: string[] = [];
               for (let j = 0; j < slideBufs.length; j++) {
-                mediaIds.push(await uploadPng(slideBufs[j], `ig-slide-${j + 1}.png`));
+                mediaIds.push(await uploadPng(slideBufs[j], `ig-auto-${accIdStr}-${j + 1}.png`));
               }
+
+              // Determine platform config based on legacy lists
+              const isIg = igAuto.igAccountIds?.includes(accId) || !igAuto.tiktokAccountIds?.includes(accId);
+              const platformCfg = isIg
+                ? { instagram: {} }
+                : { tiktok: { draft: false, is_aigc: true } };
 
               const scheduledAt = randomTimeInWindow(win.start, win.end);
               const postResp = await pbFetch("/v1/posts", {
@@ -454,84 +464,31 @@ export async function GET(req: NextRequest) {
                 body: JSON.stringify({
                   caption: caption?.value || "",
                   media: mediaIds,
-                  social_accounts: [igAccId],
+                  social_accounts: [accId],
                   scheduled_at: scheduledAt.toISOString(),
-                  platform_configurations: { instagram: {} },
+                  platform_configurations: platformCfg,
                 }),
               });
               const postId = postResp.id || postResp.data?.id || "unknown";
               igAutoResults.push({
                 userId: user.id,
-                status: `IG carousel: ${ss.name} → ${igAccId} at ${scheduledAt.toISOString()} [post:${postId}]`,
+                status: `${ss.name} → ${accIdStr} at ${scheduledAt.toISOString()} [post:${postId}]`,
               });
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
-              igAutoResults.push({ userId: user.id, status: `IG error (${igAccId}): ${msg}` });
+              igAutoResults.push({ userId: user.id, status: `error (${accIdStr}): ${msg}` });
             }
+
+            pointer++;
           }
 
-          // TikTok accounts: each gets a different random slideshow as video
-          const usedIds = new Set<string>();
-          for (const ttAccId of igAuto.tiktokAccountIds) {
-            if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(ttAccId)) continue;
-
-            const available = igSlideshows.filter((s) => !usedIds.has(s.id));
-            const ss = pickRandom(available);
-            if (!ss) continue;
-            usedIds.add(ss.id);
-
-            const prompt = pickRandom(ss.imagePrompts);
-            const caption = pickRandom(ss.captions);
-            if (!prompt) continue;
-
-            const texts = ss.slideTexts
-              .split("\n")
-              .map((t) => t.trim())
-              .filter(Boolean);
-            if (texts.length < 2) continue;
-
-            try {
-              const image = await generateImage(prompt.value);
-              if (!image) continue;
-              const slideBufs: Buffer[] = [];
-              const textStyle = Math.floor(Math.random() * 3);
-              for (const text of texts) {
-                slideBufs.push(await renderSlide(image, text, textStyle));
-              }
-              const mediaIds: string[] = [];
-              for (let j = 0; j < slideBufs.length; j++) {
-                mediaIds.push(await uploadPng(slideBufs[j], `ig-tt-slide-${j + 1}.png`));
-              }
-
-              const scheduledAt = randomTimeInWindow(win.start, win.end);
-              const postResp = await pbFetch("/v1/posts", {
-                method: "POST",
-                body: JSON.stringify({
-                  caption: caption?.value || "",
-                  media: mediaIds,
-                  social_accounts: [ttAccId],
-                  scheduled_at: scheduledAt.toISOString(),
-                  platform_configurations: {
-                    tiktok: { draft: false, is_aigc: true },
-                  },
-                }),
-              });
-              const postId = postResp.id || postResp.data?.id || "unknown";
-              igAutoResults.push({
-                userId: user.id,
-                status: `TT video: ${ss.name} → ${ttAccId} at ${scheduledAt.toISOString()} [post:${postId}]`,
-              });
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              igAutoResults.push({ userId: user.id, status: `TT video error (${ttAccId}): ${msg}` });
-            }
-          }
-
-          pointer++;
+          updatedAccounts[accIdStr] = { ...accConfig, pointer };
+          updated = true;
         }
 
-        // Save updated pointer
-        await setIgAutomation(user.id, { ...igAuto, igPointer: pointer });
+        if (updated) {
+          await setIgAutomation(user.id, { ...igAuto, accounts: updatedAccounts });
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         igAutoResults.push({ userId: user.id, status: `IG automation error: ${msg}` });
