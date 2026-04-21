@@ -78,12 +78,20 @@ export default function BooksPage() {
       setSaving(true);
       setBooks(next);
       try {
-        await fetch("/api/books", {
+        const res = await fetch("/api/books", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ books: next }),
         });
-      } catch {}
+        if (!res.ok) {
+          const text = await res.text();
+          console.error("Books save failed:", res.status, text);
+          window.alert(`Save failed: ${res.status} ${text}`);
+        }
+      } catch (e) {
+        console.error("Books save error:", e);
+        window.alert("Save failed — check console for details.");
+      }
       setSaving(false);
     },
     []
@@ -190,6 +198,96 @@ export default function BooksPage() {
 
   const activeBook = books.find((b) => b.id === activeBookId);
 
+  function downloadJSON() {
+    const blob = new Blob([JSON.stringify(books, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `books-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadText() {
+    const lines: string[] = [];
+    for (const book of books) {
+      lines.push(`=== ${book.name} ===`);
+      lines.push("");
+      if (book.imagePrompts.length > 0) {
+        lines.push("IMAGE PROMPTS:");
+        for (const p of book.imagePrompts) {
+          lines.push(`  [${p.name}] ${p.value}`);
+        }
+        lines.push("");
+      }
+      if (book.captions.length > 0) {
+        lines.push("CAPTIONS:");
+        for (const c of book.captions) {
+          lines.push(`  [${c.name}] ${c.value}`);
+        }
+        lines.push("");
+      }
+      if (book.slideshows.length > 0) {
+        lines.push("SLIDESHOWS:");
+        for (const s of book.slideshows) {
+          lines.push(`  --- ${s.name} ---`);
+          for (const line of s.slideTexts.split("\n")) {
+            if (line.trim()) lines.push(`    ${line.trim()}`);
+          }
+          lines.push("");
+        }
+      }
+      lines.push("");
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `books-backup-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importJSON() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const imported = JSON.parse(text) as Book[];
+        if (!Array.isArray(imported)) {
+          window.alert("Invalid file — expected an array of books.");
+          return;
+        }
+        const action = window.prompt(
+          `Found ${imported.length} books. Type:\n  "replace" — replace all current books\n  "merge" — add imported books alongside existing ones`
+        );
+        if (action === "replace") {
+          await persist(imported);
+          window.alert(`Replaced with ${imported.length} books.`);
+        } else if (action === "merge") {
+          const merged = [...books];
+          for (const ib of imported) {
+            if (books.find((b) => b.id === ib.id)) {
+              ib.id = uid();
+            }
+            merged.push(ib);
+          }
+          await persist(merged);
+          window.alert(`Merged — now ${merged.length} books total.`);
+        } else {
+          window.alert("Import cancelled.");
+        }
+      } catch {
+        window.alert("Failed to read file.");
+      }
+    };
+    input.click();
+  }
+
   return (
     <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
       <div className="mx-auto w-full max-w-5xl px-6 sm:px-10 py-10">
@@ -202,8 +300,26 @@ export default function BooksPage() {
 
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Books</h1>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {saving && <span className="text-xs text-gray-500">Saving…</span>}
+            <button
+              onClick={downloadJSON}
+              className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors text-xs"
+            >
+              Export JSON
+            </button>
+            <button
+              onClick={downloadText}
+              className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors text-xs"
+            >
+              Export Text
+            </button>
+            <button
+              onClick={importJSON}
+              className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors text-xs"
+            >
+              Import JSON
+            </button>
             <button
               onClick={createBook}
               className="px-4 py-2 rounded-xl bg-blue-500 text-white font-semibold hover:bg-blue-600 transition-colors text-sm shadow-sm"
