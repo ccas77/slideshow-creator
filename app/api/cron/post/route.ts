@@ -263,9 +263,8 @@ export async function GET(req: NextRequest) {
       }
       try {
         const slideBufs: Buffer[] = [];
-        const textStyle = Math.floor(Math.random() * 3);
         for (const text of job.slideTexts) {
-          const buf = await renderSlide(image, text, textStyle);
+          const buf = await renderSlide(image, text);
           slideBufs.push(buf);
         }
 
@@ -480,9 +479,9 @@ export async function GET(req: NextRequest) {
                 continue;
               }
               const slideBufs: Buffer[] = [];
-              const textStyle = Math.floor(Math.random() * 3);
+
               for (const text of texts) {
-                slideBufs.push(await renderSlide(image, text, textStyle));
+                slideBufs.push(await renderSlide(image, text));
               }
               const mediaIds: string[] = [];
               for (let j = 0; j < slideBufs.length; j++) {
