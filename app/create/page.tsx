@@ -118,7 +118,11 @@ export default function CreatePage() {
     }
     setExporting(true);
     try {
-      const book = books.find((b) => b.id === exportBookId);
+      // Re-fetch latest books from KV to avoid overwriting changes made on other pages
+      const freshRes = await fetch("/api/books");
+      const freshBooks: Book[] = freshRes.ok ? (await freshRes.json()).books || [] : books;
+
+      const book = freshBooks.find((b) => b.id === exportBookId);
       if (!book) return;
 
       const promptIds = [...selectedPromptIds];
@@ -147,7 +151,7 @@ export default function CreatePage() {
       };
       updatedBook = { ...updatedBook, slideshows: [...updatedBook.slideshows, newSlideshow] };
 
-      const updated = books.map((b) => (b.id === exportBookId ? updatedBook : b));
+      const updated = freshBooks.map((b) => (b.id === exportBookId ? updatedBook : b));
       await fetch("/api/books", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
