@@ -97,6 +97,9 @@ export async function GET(req: NextRequest) {
       listUsers(),
     ]);
 
+    const nowUtc = new Date();
+    console.log(`[CRON] Running at ${nowUtc.toISOString()}, found ${users.length} users, ${allAccounts.length} PostBridge accounts`);
+
     // Phase 1: build jobs across all users, respecting each user's allowedAccountIds
     const jobs: Job[] = [];
     const accountDataMap = new Map<
@@ -112,13 +115,19 @@ export async function GET(req: NextRequest) {
           ? allAccounts.filter((a) => allowedIds.includes(a.id))
           : allAccounts; // no filter = all accounts (unlikely for multi-user)
 
+      console.log(`[CRON] User ${user.id}: ${userAccounts.length} accounts (allowedIds: ${JSON.stringify(allowedIds)})`);
+
       const books = await getBooks(user.id);
+      console.log(`[CRON] User ${user.id}: ${books.length} books`);
 
       for (const acc of userAccounts) {
         try {
           const data = await getAccountData(user.id, acc.id);
           accountDataMap.set(`${user.id}:${acc.id}`, data);
-          if (!data.config.enabled) continue;
+          if (!data.config.enabled) {
+            console.log(`[CRON] Account ${acc.username} (${acc.id}): disabled, skipping`);
+            continue;
+          }
 
           let windows: Array<{ start: string; end: string }> = [];
           if (data.config.intervals && data.config.intervals.length > 0) {
@@ -136,8 +145,12 @@ export async function GET(req: NextRequest) {
             }
           }
 
+          console.log(`[CRON] Account ${acc.username} (${acc.id}): enabled, ${windows.length} windows: ${JSON.stringify(windows)}`);
+
           for (const win of windows) {
-            if (!shouldProcessWindow(win.start)) continue;
+            const willProcess = shouldProcessWindow(win.start);
+            console.log(`[CRON] Window ${win.start}-${win.end}: shouldProcess=${willProcess}`);
+            if (!willProcess) continue;
             let imagePrompt = "";
             let slideTexts: string[] = [];
             let captionText = "";
