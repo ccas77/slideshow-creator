@@ -11,6 +11,7 @@ import {
   getIgAutomation,
   getIgSlideshows,
   setIgAutomation,
+  redis,
 } from "@/lib/kv";
 import { listUsers } from "@/lib/auth";
 import { generateImage } from "@/lib/gemini";
@@ -25,13 +26,38 @@ function pickRandom<T>(arr: T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// The cron runs at :07 past each hour.  The cron at HH:07 handles every
-// window whose start hour equals HH.  Simple, no duplicates, no edge cases.
-// Pass forceHour to override (for manual testing).
+// Check if a window should be scheduled: any window whose start hour is >= current hour
+// (i.e., all remaining windows today). Duplicate prevention is handled by the
+// scheduled-today tracking below.
 function shouldProcessWindow(windowStart: string, forceHour?: number): boolean {
   const [sh] = windowStart.split(":").map(Number);
   const currentHour = forceHour ?? new Date().getUTCHours();
-  return sh === currentHour;
+  return sh >= currentHour;
+}
+
+// Track which (user, account, window) combos have been scheduled today to avoid duplicates.
+// Key: cron-scheduled:YYYY-MM-DD — value: Set of "userId:accountId:windowStart" strings.
+// Expires at end of day.
+const scheduledTodayKey = () => {
+  const d = new Date().toISOString().slice(0, 10);
+  return `cron-scheduled:${d}`;
+};
+
+async function getScheduledToday(): Promise<Set<string>> {
+  const data = await redis.get<string[]>(scheduledTodayKey());
+  return new Set(data || []);
+}
+
+async function markScheduled(entries: string[]): Promise<void> {
+  if (entries.length === 0) return;
+  const key = scheduledTodayKey();
+  const existing = await redis.get<string[]>(key);
+  const merged = [...(existing || []), ...entries];
+  // Expire at midnight UTC + 1 hour buffer
+  const now = new Date();
+  const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 1, 0, 0));
+  const ttl = Math.ceil((midnight.getTime() - now.getTime()) / 1000);
+  await redis.set(key, merged, { ex: ttl });
 }
 
 function randomTimeInWindow(windowStart: string, windowEnd: string): Date {
@@ -69,6 +95,7 @@ interface Job {
   captionText: string;
   source: string;
   coverImage?: string;
+  schedKey: string; // for duplicate tracking
 }
 
 export async function GET(req: NextRequest) {
@@ -95,10 +122,12 @@ export async function GET(req: NextRequest) {
   const debugLog: string[] = [];
 
   try {
-    const [allAccounts, users] = await Promise.all([
+    const [allAccounts, users, scheduledToday] = await Promise.all([
       listTikTokAccounts(),
       listUsers(),
+      getScheduledToday(),
     ]);
+    const newlyScheduled: string[] = []; // entries to mark after successful scheduling
 
     const nowUtc = new Date();
     debugLog.push(`Running at ${nowUtc.toISOString()}, ${users.length} users, ${allAccounts.length} PB accounts`);
@@ -209,8 +238,10 @@ export async function GET(req: NextRequest) {
 
           for (const win of windows) {
             const willProcess = shouldProcessWindow(win.start, forceHour);
-            debugLog.push(`Window ${win.start}-${win.end}: shouldProcess=${willProcess}`);
-            if (!willProcess) continue;
+            const schedKey = `${user.id}:${acc.id}:${win.start}`;
+            const alreadyScheduled = scheduledToday.has(schedKey);
+            debugLog.push(`Window ${win.start}-${win.end}: shouldProcess=${willProcess}, alreadyScheduled=${alreadyScheduled}`);
+            if (!willProcess || alreadyScheduled) continue;
             let imagePrompt = "";
             let slideTexts: string[] = [];
             let captionText = "";
@@ -320,6 +351,7 @@ export async function GET(req: NextRequest) {
               captionText,
               source,
               coverImage,
+              schedKey,
             });
           }
       } catch (err) {
@@ -404,6 +436,7 @@ export async function GET(req: NextRequest) {
           job,
           status: `scheduled ${job.slideTexts.length} slides for ${scheduledAt.toISOString()} (${job.source}) [post:${postId}]`,
         });
+        newlyScheduled.push(job.schedKey);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         postResults.push({ job, status: `error: ${msg}` });
@@ -478,8 +511,11 @@ export async function GET(req: NextRequest) {
           }
           if (pool.length === 0) continue;
 
-          // Check if any window is active this hour
-          const activeWindows = accConfig.intervals.filter((w) => shouldProcessWindow(w.start, forceHour));
+          // Check if any window is eligible (future today + not yet scheduled)
+          const activeWindows = accConfig.intervals.filter((w) => {
+            const sk = `topn:${user.id}:${accIdStr}:${w.start}`;
+            return shouldProcessWindow(w.start, forceHour) && !scheduledToday.has(sk);
+          });
           if (activeWindows.length === 0) continue;
 
           // Round-robin: pick one list
@@ -487,6 +523,7 @@ export async function GET(req: NextRequest) {
           const selectedList = pool[listIndex];
 
           for (const win of activeWindows) {
+            const topnSchedKey = `topn:${user.id}:${accIdStr}:${win.start}`;
             try {
               const scheduledAt = randomTimeInWindow(win.start, win.end);
               const r = await publishTopN({
@@ -501,6 +538,7 @@ export async function GET(req: NextRequest) {
                 listName: selectedList.name,
                 status: `${accIdStr}: scheduled ${r.slides} slides for ${scheduledAt.toISOString()} [post:${r.postId}]`,
               });
+              newlyScheduled.push(topnSchedKey);
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
               topNResults.push({
@@ -565,7 +603,8 @@ export async function GET(req: NextRequest) {
           let pointer = accConfig.pointer;
 
           for (const win of accConfig.intervals) {
-            if (!shouldProcessWindow(win.start, forceHour)) continue;
+            const igSchedKey = `ig:${user.id}:${accIdStr}:${win.start}`;
+            if (!shouldProcessWindow(win.start, forceHour) || scheduledToday.has(igSchedKey)) continue;
             const ss = pool[pointer % pool.length];
             const prompt = pickRandom(ss.imagePrompts);
             const caption = pickRandom(ss.captions);
@@ -612,6 +651,7 @@ export async function GET(req: NextRequest) {
                 userId: user.id,
                 status: `${ss.name} → ${accIdStr} at ${scheduledAt.toISOString()} [post:${postId}]`,
               });
+              newlyScheduled.push(igSchedKey);
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
               igAutoResults.push({ userId: user.id, status: `error (${accIdStr}): ${msg}` });
@@ -632,6 +672,9 @@ export async function GET(req: NextRequest) {
         igAutoResults.push({ userId: user.id, status: `IG automation error: ${msg}` });
       }
     }
+
+    // Mark all successfully scheduled entries so future cron runs today skip them
+    await markScheduled(newlyScheduled);
 
     return NextResponse.json({ ok: true, results, topNResults, igAutoResults, debugLog });
   } catch (err) {
