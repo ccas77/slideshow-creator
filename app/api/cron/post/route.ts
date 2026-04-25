@@ -24,18 +24,13 @@ function pickRandom<T>(arr: T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Returns true if now is within 1 hour before the window start (UTC).
-// This prevents duplicate scheduling when cron runs more than once per day.
-function shouldProcessWindow(windowStart: string): boolean {
-  const [sh, sm] = windowStart.split(":").map(Number);
-  const now = new Date();
-  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const startMin = sh * 60 + sm;
-  // Check if we're in the 60 minutes before the window starts
-  const diff = startMin - nowMin;
-  // Handle midnight wrap: if diff is very negative, add 24h
-  const adjusted = diff < -60 ? diff + 1440 : diff;
-  return adjusted >= 0 && adjusted < 60;
+// The cron runs at :07 past each hour.  The cron at HH:07 handles every
+// window whose start hour equals HH.  Simple, no duplicates, no edge cases.
+// Pass forceHour to override (for manual testing).
+function shouldProcessWindow(windowStart: string, forceHour?: number): boolean {
+  const [sh] = windowStart.split(":").map(Number);
+  const currentHour = forceHour ?? new Date().getUTCHours();
+  return sh === currentHour;
 }
 
 function randomTimeInWindow(windowStart: string, windowEnd: string): Date {
@@ -84,12 +79,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Dry-run mode: ?dry=1 skips image generation and posting, only shows what WOULD happen
+  // Force hour: ?hour=8 overrides the current UTC hour for window matching
+  const urlParams = new URL(req.url).searchParams;
+  const dryRun = urlParams.get("dry") === "1";
+  const forceHour = urlParams.get("hour") ? Number(urlParams.get("hour")) : undefined;
+
   const results: Array<{
     userId: string;
     accountId: number;
     username: string;
     status: string;
   }> = [];
+  const debugLog: string[] = [];
 
   try {
     const [allAccounts, users] = await Promise.all([
@@ -98,7 +100,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const nowUtc = new Date();
-    console.log(`[CRON] Running at ${nowUtc.toISOString()}, found ${users.length} users, ${allAccounts.length} PostBridge accounts`);
+    debugLog.push(`Running at ${nowUtc.toISOString()}, ${users.length} users, ${allAccounts.length} PB accounts`);
 
     // Phase 1: build jobs across all users, respecting each user's allowedAccountIds
     const jobs: Job[] = [];
@@ -107,25 +109,74 @@ export async function GET(req: NextRequest) {
       Awaited<ReturnType<typeof getAccountData>>
     >(); // key = `${userId}:${accountId}`
 
+    // Build a map: for each account, find which user's config to use.
+    // Admin users can configure ANY account, but their allowedAccountIds may
+    // not list it.  We resolve conflicts by preferring admin configs when enabled.
+    const accountOwner = new Map<number, { user: typeof users[0]; data: Awaited<ReturnType<typeof getAccountData>>; books: Awaited<ReturnType<typeof getBooks>> }>();
+
     for (const user of users) {
       const settings = await getAppSettings(user.id);
       const allowedIds = settings.allowedAccountIds;
-      const userAccounts =
-        allowedIds && allowedIds.length > 0
+      // Admins can configure any account
+      const isAdmin = user.role === "admin";
+      const userAccounts = isAdmin
+        ? allAccounts
+        : allowedIds && allowedIds.length > 0
           ? allAccounts.filter((a) => allowedIds.includes(a.id))
-          : allAccounts; // no filter = all accounts (unlikely for multi-user)
+          : [];
 
-      console.log(`[CRON] User ${user.id}: ${userAccounts.length} accounts (allowedIds: ${JSON.stringify(allowedIds)})`);
+      debugLog.push(`User ${user.id} (${user.role}): ${userAccounts.length} accounts (allowedIds: ${JSON.stringify(allowedIds)})`);
 
       const books = await getBooks(user.id);
-      console.log(`[CRON] User ${user.id}: ${books.length} books`);
+      debugLog.push(`User ${user.id}: ${books.length} books`);
 
       for (const acc of userAccounts) {
         try {
           const data = await getAccountData(user.id, acc.id);
           accountDataMap.set(`${user.id}:${acc.id}`, data);
+
+          // Show admin's config for every account
+          if (isAdmin) {
+            debugLog.push(`ADMIN-CFG ${acc.username} (${acc.id}): enabled=${data.config.enabled} intervals=${JSON.stringify(data.config.intervals || 'none')} selections=${data.config.selections?.length ?? 0}`);
+          }
+
           if (!data.config.enabled) {
-            console.log(`[CRON] Account ${acc.username} (${acc.id}): disabled, skipping`);
+            debugLog.push(`Account ${acc.username} (${acc.id}) [u:${user.id}]: disabled`);
+            continue;
+          }
+
+          // Decide who "owns" this account for cron purposes.
+          // Prefer the user who has it in their allowedIds (the intended owner).
+          // Admin is fallback only if no regular user has configured it.
+          const existing = accountOwner.get(acc.id);
+          if (!existing) {
+            accountOwner.set(acc.id, { user, data, books });
+          } else if (!isAdmin && existing.user.role === "admin") {
+            // Regular user with explicit allowedIds takes priority over admin fallback
+            accountOwner.set(acc.id, { user, data, books });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          results.push({
+            userId: user.id,
+            accountId: acc.id,
+            username: acc.username,
+            status: `error: ${msg}`,
+          });
+        }
+      }
+    }
+
+    // Now process each account exactly once using the resolved owner
+    for (const acc of allAccounts) {
+      const owner = accountOwner.get(acc.id);
+      if (!owner) continue;
+      const { user, data, books } = owner;
+
+      try {
+          accountDataMap.set(`${user.id}:${acc.id}`, data);
+          if (!data.config.enabled) {
+            debugLog.push(`Account ${acc.username} (${acc.id}): disabled`);
             continue;
           }
 
@@ -145,11 +196,11 @@ export async function GET(req: NextRequest) {
             }
           }
 
-          console.log(`[CRON] Account ${acc.username} (${acc.id}): enabled, ${windows.length} windows: ${JSON.stringify(windows)}`);
+          debugLog.push(`Account ${acc.username} (${acc.id}) [owner:${user.id} ${user.role}]: enabled, windows: ${JSON.stringify(windows)}`);
 
           for (const win of windows) {
-            const willProcess = shouldProcessWindow(win.start);
-            console.log(`[CRON] Window ${win.start}-${win.end}: shouldProcess=${willProcess}`);
+            const willProcess = shouldProcessWindow(win.start, forceHour);
+            debugLog.push(`Window ${win.start}-${win.end}: shouldProcess=${willProcess}`);
             if (!willProcess) continue;
             let imagePrompt = "";
             let slideTexts: string[] = [];
@@ -163,13 +214,19 @@ export async function GET(req: NextRequest) {
               slideshow: (typeof books)[0]["slideshows"][0];
             }> = [];
 
+            debugLog.push(`  Config: selections=${JSON.stringify(selections?.length ?? 'none')}, bookId=${bookId ?? 'none'}, slideshowIds=${JSON.stringify(slideshowIds?.length ?? 'none')}`);
+
             if (selections && selections.length > 0) {
               for (const sel of selections) {
                 const book = books.find((b) => b.id === sel.bookId);
                 const slideshow = book?.slideshows.find(
                   (s) => s.id === sel.slideshowId
                 );
-                if (book && slideshow) candidates.push({ book, slideshow });
+                if (book && slideshow) {
+                  candidates.push({ book, slideshow });
+                } else {
+                  debugLog.push(`  Selection miss: bookId=${sel.bookId} found=${!!book}, slideshowId=${sel.slideshowId} found=${!!slideshow}`);
+                }
               }
             } else if (bookId && slideshowIds && slideshowIds.length > 0) {
               const book = books.find((b) => b.id === bookId);
@@ -177,13 +234,21 @@ export async function GET(req: NextRequest) {
                 for (const sid of slideshowIds) {
                   const slideshow = book.slideshows.find((s) => s.id === sid);
                   if (slideshow) candidates.push({ book, slideshow });
+                  else debugLog.push(`  Slideshow miss: id=${sid} not in book ${book.name}`);
                 }
+              } else {
+                debugLog.push(`  Book miss: id=${bookId} not found`);
               }
             }
 
+            debugLog.push(`  Candidates: ${candidates.length}`);
+
             if (candidates.length > 0) {
               const picked = pickRandom(candidates);
-              if (!picked || !picked.slideshow.slideTexts.trim()) continue;
+              if (!picked || !picked.slideshow.slideTexts.trim()) {
+                debugLog.push(`  Skip: picked slideshow has no text`);
+                continue;
+              }
               const { book, slideshow: pickedSlideshow } = picked;
               // If the slideshow explicitly links prompts/captions, rotate only
               // through those. Otherwise (e.g. imported slideshows with empty
@@ -200,7 +265,10 @@ export async function GET(req: NextRequest) {
                 linkedCaptions.length > 0 ? linkedCaptions : book.captions || [];
               const pickedPrompt = pickRandom(allowedPrompts);
               const pickedCaption = pickRandom(allowedCaptions);
-              if (!pickedPrompt) continue;
+              if (!pickedPrompt) {
+                debugLog.push(`  Skip: no image prompts (linked=${linkedPrompts.length}, book=${(book.imagePrompts||[]).length})`);
+                continue;
+              }
               imagePrompt = pickedPrompt.value;
               slideTexts = pickedSlideshow.slideTexts
                 .split("\n")
@@ -214,11 +282,15 @@ export async function GET(req: NextRequest) {
               captionText = pickedCaption?.value || "";
               coverImage = book.coverImage;
               source = `book:${book.name}/${pickedSlideshow.name}`;
+              debugLog.push(`  Picked: ${source}, ${slideTexts.length} slides, prompt="${imagePrompt.slice(0,40)}..."`);
             } else {
               const prompt = pickRandom(data.prompts);
               const textSet = pickRandom(data.texts);
               const captionItem = pickRandom(data.captions);
-              if (!prompt || !textSet) continue;
+              if (!prompt || !textSet) {
+                debugLog.push(`  Skip: no legacy prompts/texts (prompts=${data.prompts.length}, texts=${data.texts.length})`);
+                continue;
+              }
               imagePrompt = prompt.value;
               slideTexts = textSet.value
                 .split("\n")
@@ -241,16 +313,24 @@ export async function GET(req: NextRequest) {
               coverImage,
             });
           }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          results.push({
-            userId: user.id,
-            accountId: acc.id,
-            username: acc.username,
-            status: `error: ${msg}`,
-          });
-        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        results.push({
+          userId: user.id,
+          accountId: acc.id,
+          username: acc.username,
+          status: `error: ${msg}`,
+        });
       }
+    }
+
+    debugLog.push(`Jobs built: ${jobs.length}${dryRun ? ' (DRY RUN — stopping here)' : ''}`);
+    for (const j of jobs) {
+      debugLog.push(`  Job: ${j.acc.username} (${j.acc.id}), win=${j.win.start}-${j.win.end}, src=${j.source}, slides=${j.slideTexts.length}, prompt="${j.imagePrompt.slice(0,50)}..."`);
+    }
+
+    if (dryRun) {
+      return NextResponse.json({ ok: true, dryRun: true, jobCount: jobs.length, debugLog });
     }
 
     // Phase 2: generate all images in parallel
@@ -390,7 +470,7 @@ export async function GET(req: NextRequest) {
           if (pool.length === 0) continue;
 
           // Check if any window is active this hour
-          const activeWindows = accConfig.intervals.filter((w) => shouldProcessWindow(w.start));
+          const activeWindows = accConfig.intervals.filter((w) => shouldProcessWindow(w.start, forceHour));
           if (activeWindows.length === 0) continue;
 
           // Round-robin: pick one list
@@ -476,7 +556,7 @@ export async function GET(req: NextRequest) {
           let pointer = accConfig.pointer;
 
           for (const win of accConfig.intervals) {
-            if (!shouldProcessWindow(win.start)) continue;
+            if (!shouldProcessWindow(win.start, forceHour)) continue;
             const ss = pool[pointer % pool.length];
             const prompt = pickRandom(ss.imagePrompts);
             const caption = pickRandom(ss.captions);
@@ -544,7 +624,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, results, topNResults, igAutoResults });
+    return NextResponse.json({ ok: true, results, topNResults, igAutoResults, debugLog });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });

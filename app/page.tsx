@@ -517,7 +517,16 @@ export default function Home() {
             lastStatus,
           },
         }),
-      }).catch(() => {});
+      }).then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          console.error("Config save failed:", res.status, text);
+          window.alert(`Save failed: ${res.status} ${text}`);
+        }
+      }).catch((e) => {
+        console.error("Config save error:", e);
+        window.alert("Save failed — check console for details.");
+      });
     }, 400);
     return () => clearTimeout(t);
   }, [
