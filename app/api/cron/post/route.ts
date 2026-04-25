@@ -134,6 +134,7 @@ export async function GET(req: NextRequest) {
 
     // Phase 1: build jobs across all users, respecting each user's allowedAccountIds
     const jobs: Job[] = [];
+    const pointerUpdates = new Map<string, number>(); // key = userId:accountId, value = new pointer
     const accountDataMap = new Map<
       string,
       Awaited<ReturnType<typeof getAccountData>>
@@ -284,7 +285,13 @@ export async function GET(req: NextRequest) {
             debugLog.push(`  Candidates: ${candidates.length}`);
 
             if (candidates.length > 0) {
-              const picked = pickRandom(candidates);
+              // Round-robin: use pointer to cycle through candidates
+              const ownerKey = `${user.id}:${acc.id}`;
+              const currentPointer = pointerUpdates.get(ownerKey) ?? (data.config.pointer || 0);
+              const pickedIdx = currentPointer % candidates.length;
+              const picked = candidates[pickedIdx];
+              pointerUpdates.set(ownerKey, currentPointer + 1);
+
               if (!picked || !picked.slideshow.slideTexts.trim()) {
                 debugLog.push(`  Skip: picked slideshow has no text`);
                 continue;
@@ -322,7 +329,7 @@ export async function GET(req: NextRequest) {
               captionText = pickedCaption?.value || "";
               coverImage = book.coverImage;
               source = `book:${book.name}/${pickedSlideshow.name}`;
-              debugLog.push(`  Picked: ${source}, ${slideTexts.length} slides, prompt="${imagePrompt.slice(0,40)}..."`);
+              debugLog.push(`  Picked [${pickedIdx}/${candidates.length}]: ${source}, ${slideTexts.length} slides, prompt="${imagePrompt.slice(0,40)}..."`);
             } else {
               const prompt = pickRandom(data.prompts);
               const textSet = pickRandom(data.texts);
@@ -467,8 +474,13 @@ export async function GET(req: NextRequest) {
       try {
         const data = accountDataMap.get(k);
         if (data) {
+          const newPointer = pointerUpdates.get(k);
           await setAccountData(userId, accId, {
             ...data,
+            config: {
+              ...data.config,
+              ...(newPointer !== undefined ? { pointer: newPointer } : {}),
+            },
             lastRun: new Date().toISOString(),
             lastStatus: status,
           });

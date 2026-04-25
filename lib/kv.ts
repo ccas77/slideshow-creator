@@ -26,6 +26,7 @@ export interface AutomationConfig {
   bookId?: string;
   slideshowIds?: string[];
   selections?: Array<{ bookId: string; slideshowId: string }>;
+  pointer?: number; // round-robin index for slideshow selection
 }
 
 export interface NamedItem {
