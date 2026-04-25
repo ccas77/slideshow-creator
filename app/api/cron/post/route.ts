@@ -372,6 +372,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Cap jobs per run to avoid timeout (5 min limit). Unprocessed jobs will
+    // be picked up on the next hourly cron run since they won't be in scheduledToday.
+    const MAX_JOBS_PER_RUN = 6;
+    if (jobs.length > MAX_JOBS_PER_RUN) {
+      debugLog.push(`Capping ${jobs.length} jobs to ${MAX_JOBS_PER_RUN} (remaining will be processed next cron run)`);
+      jobs.length = MAX_JOBS_PER_RUN;
+    }
+
     debugLog.push(`Jobs built: ${jobs.length}${dryRun ? ' (DRY RUN — stopping here)' : ''}`);
     for (const j of jobs) {
       debugLog.push(`  Job: ${j.acc.username} (${j.acc.id}), win=${j.win.start}-${j.win.end}, src=${j.source}, slides=${j.slideTexts.length}, prompt="${j.imagePrompt.slice(0,50)}..."`);
