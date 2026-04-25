@@ -181,6 +181,33 @@ export async function setBooks(userId: string, books: Book[]): Promise<void> {
   await redis.set(booksKey(userId), books);
 }
 
+// ── Book Covers (stored individually to avoid payload size limits) ──
+
+const bookCoverKey = (userId: string, bookId: string) =>
+  `u:${userId}:book-cover:${bookId}`;
+
+export async function getBookCover(
+  userId: string,
+  bookId: string
+): Promise<string | null> {
+  return await redis.get<string>(bookCoverKey(userId, bookId));
+}
+
+export async function setBookCover(
+  userId: string,
+  bookId: string,
+  coverImage: string
+): Promise<void> {
+  await redis.set(bookCoverKey(userId, bookId), coverImage);
+}
+
+export async function deleteBookCover(
+  userId: string,
+  bookId: string
+): Promise<void> {
+  await redis.del(bookCoverKey(userId, bookId));
+}
+
 // ── Top Books (per-user) ──
 
 export interface TopBook {

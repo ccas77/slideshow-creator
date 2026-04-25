@@ -3,6 +3,7 @@ import {
   getAccountData,
   setAccountData,
   getBooks,
+  getBookCover,
   getAppSettings,
   getTopNLists,
   getTopNAutomation,
@@ -127,7 +128,15 @@ export async function GET(req: NextRequest) {
 
       debugLog.push(`User ${user.id} (${user.role}): ${userAccounts.length} accounts (allowedIds: ${JSON.stringify(allowedIds)})`);
 
-      const books = await getBooks(user.id);
+      const rawBooks = await getBooks(user.id);
+      // Merge covers from individual keys (covers are stored separately to avoid payload limits)
+      const books = await Promise.all(
+        rawBooks.map(async (b) => {
+          if (b.coverImage) return b; // legacy inline cover
+          const cover = await getBookCover(user.id, b.id);
+          return cover ? { ...b, coverImage: cover } : b;
+        })
+      );
       debugLog.push(`User ${user.id}: ${books.length} books`);
 
       for (const acc of userAccounts) {

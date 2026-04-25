@@ -275,10 +275,12 @@ export default function Home() {
   async function saveBooks(next: Book[]) {
     setBooks(next);
     try {
+      // Strip coverImage from payload to avoid 413 errors.
+      const lightweight = next.map(({ coverImage, ...rest }) => rest);
       await fetch("/api/books", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ books: next }),
+        body: JSON.stringify({ books: lightweight }),
       });
     } catch {}
   }

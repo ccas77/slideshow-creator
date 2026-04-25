@@ -78,10 +78,13 @@ export default function BooksPage() {
       setSaving(true);
       setBooks(next);
       try {
+        // Strip coverImage from payload to avoid 413 errors.
+        // Covers are stored individually via /api/book-cover.
+        const lightweight = next.map(({ coverImage, ...rest }) => rest);
         const res = await fetch("/api/books", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ books: next }),
+          body: JSON.stringify({ books: lightweight }),
         });
         if (!res.ok) {
           const text = await res.text();
@@ -93,6 +96,26 @@ export default function BooksPage() {
         window.alert("Save failed — check console for details.");
       }
       setSaving(false);
+    },
+    []
+  );
+
+  // Save a single book's cover image individually (avoids 413 payload limits)
+  const persistCover = useCallback(
+    async (bookId: string, coverImage: string | undefined) => {
+      try {
+        if (coverImage) {
+          await fetch("/api/book-cover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bookId, coverImage }),
+          });
+        } else {
+          await fetch(`/api/book-cover?bookId=${bookId}`, { method: "DELETE" });
+        }
+      } catch (e) {
+        console.error("Cover save error:", e);
+      }
     },
     []
   );
@@ -349,7 +372,10 @@ export default function BooksPage() {
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-gray-500">Book cover</span>
                           <button
-                            onClick={() => updateBook(activeBook.id, (b) => ({ ...b, coverImage: undefined }))}
+                            onClick={() => {
+                              updateBook(activeBook.id, (b) => ({ ...b, coverImage: undefined }));
+                              persistCover(activeBook.id, undefined);
+                            }}
                             className="text-xs text-red-500 hover:text-red-600"
                           >
                             Remove
@@ -373,7 +399,9 @@ export default function BooksPage() {
                                 if (!file) return;
                                 const reader = new FileReader();
                                 reader.onload = () => {
-                                  updateBook(activeBook.id, (b) => ({ ...b, coverImage: reader.result as string }));
+                                  const cover = reader.result as string;
+                                  updateBook(activeBook.id, (b) => ({ ...b, coverImage: cover }));
+                                  persistCover(activeBook.id, cover);
                                 };
                                 reader.readAsDataURL(file);
                                 e.target.value = "";
@@ -396,6 +424,7 @@ export default function BooksPage() {
                                 const data = await res.json();
                                 if (data.coverData) {
                                   updateBook(activeBook.id, (b) => ({ ...b, coverImage: data.coverData }));
+                                  persistCover(activeBook.id, data.coverData);
                                 }
                               } catch {}
                               (e.target as HTMLInputElement).value = "";
