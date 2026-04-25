@@ -372,13 +372,33 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Cap jobs per run to avoid timeout (5 min limit). Unprocessed jobs will
-    // be picked up on the next hourly cron run since they won't be in scheduledToday.
-    const MAX_JOBS_PER_RUN = 6;
-    if (jobs.length > MAX_JOBS_PER_RUN) {
-      debugLog.push(`Capping ${jobs.length} jobs to ${MAX_JOBS_PER_RUN} (remaining will be processed next cron run)`);
-      jobs.length = MAX_JOBS_PER_RUN;
+    // Sort by earliest window first, then deduplicate to one job per account.
+    // This ensures every account gets at least one post before any account gets a second.
+    jobs.sort((a, b) => {
+      const [ah] = a.win.start.split(":").map(Number);
+      const [bh] = b.win.start.split(":").map(Number);
+      return ah - bh;
+    });
+    const seenAccounts = new Set<number>();
+    const firstJobs: Job[] = [];
+    const laterJobs: Job[] = [];
+    for (const j of jobs) {
+      if (!seenAccounts.has(j.acc.id)) {
+        seenAccounts.add(j.acc.id);
+        firstJobs.push(j);
+      } else {
+        laterJobs.push(j);
+      }
     }
+    // Prioritize: one per account first, then remaining slots for later jobs
+    const MAX_JOBS_PER_RUN = 6;
+    const prioritized = [...firstJobs, ...laterJobs];
+    if (prioritized.length > MAX_JOBS_PER_RUN) {
+      debugLog.push(`Capping ${prioritized.length} jobs to ${MAX_JOBS_PER_RUN} (${firstJobs.length} accounts, remaining next cron run)`);
+      prioritized.length = MAX_JOBS_PER_RUN;
+    }
+    jobs.length = 0;
+    jobs.push(...prioritized);
 
     debugLog.push(`Jobs built: ${jobs.length}${dryRun ? ' (DRY RUN — stopping here)' : ''}`);
     for (const j of jobs) {
