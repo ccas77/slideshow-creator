@@ -55,7 +55,8 @@ async function renderText(
   fontFile: string,
   text: string,
   color: string,
-  fontSize: number
+  fontSize: number,
+  maxWidth?: number
 ): Promise<Buffer> {
   const pSize = fontSize * 1024;
   const markup = `<span foreground="${color}" font_weight="bold" font_size="${pSize}">${escapeMarkup(text)}</span>`;
@@ -63,7 +64,7 @@ async function renderText(
     text: {
       text: markup,
       fontfile: fontFile,
-      width: W - 80,
+      width: maxWidth ?? (W - 80),
       align: "centre",
       rgba: true,
       dpi: 150,
@@ -74,7 +75,7 @@ async function renderText(
 }
 
 /**
- * Composite text with black stroke, centered horizontally on the canvas.
+ * Composite text with black stroke on a solid box, centered horizontally.
  * sharp's text-to-image trims to actual glyph extents, so we measure and
  * center rather than composite at a fixed left offset.
  */
@@ -83,18 +84,33 @@ async function compositeTextWithStroke(
   fontFile: string,
   text: string,
   fontSize: number,
-  topOffset: number
+  topOffset: number,
+  maxWidth?: number
 ): Promise<Buffer> {
-  const strokePng = await renderText(fontFile, text, "black", fontSize);
-  const textPng = await renderText(fontFile, text, "white", fontSize);
+  const strokePng = await renderText(fontFile, text, "black", fontSize, maxWidth);
+  const textPng = await renderText(fontFile, text, "white", fontSize, maxWidth);
 
   const meta = await sharp(textPng).metadata();
   const textW = meta.width || (W - 80);
+  const textH = meta.height || 50;
   const leftOffset = Math.max(0, Math.round((W - textW) / 2));
+
+  // Solid box behind text
+  const boxPadX = 28;
+  const boxPadY = 18;
+  const boxW = textW + boxPadX * 2;
+  const boxH = textH + boxPadY * 2;
+  const boxLeft = Math.max(0, leftOffset - boxPadX);
+  const boxTop = Math.max(0, topOffset - boxPadY);
+  const boxSvg = `<svg width="${boxW}" height="${boxH}" xmlns="http://www.w3.org/2000/svg">
+    <rect width="${boxW}" height="${boxH}" rx="16" ry="16" fill="rgba(0,0,0,0.65)"/>
+  </svg>`;
+  const boxPng = await sharp(Buffer.from(boxSvg)).png().toBuffer();
 
   const off = 2;
   return sharp(base)
     .composite([
+      { input: boxPng, top: boxTop, left: boxLeft },
       { input: strokePng, top: topOffset - off, left: leftOffset },
       { input: strokePng, top: topOffset + off, left: leftOffset },
       { input: strokePng, top: topOffset, left: leftOffset - off },
@@ -133,14 +149,15 @@ export async function renderTitleSlide(
     .png()
     .toBuffer();
 
-  const textPng = await renderText(fontFile, text, "white", 28);
+  const titleFontSize = 42;
+  const textPng = await renderText(fontFile, text, "white", titleFontSize);
   const textMeta = await sharp(textPng).metadata();
   const textH = textMeta.height || 0;
   // Center within safe zone (not the full canvas) so text isn't buried under
   // TikTok's top/bottom UI chrome.
   const topOffset = SAFE_TOP + Math.max(0, Math.round((SAFE_H - textH) / 2));
 
-  return compositeTextWithStroke(withGradient, fontFile, text, 28, topOffset);
+  return compositeTextWithStroke(withGradient, fontFile, text, titleFontSize, topOffset, 550);
 }
 
 /** Book slide: title + author at top of safe zone, cover below, content

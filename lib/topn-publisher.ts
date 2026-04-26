@@ -28,14 +28,10 @@ export interface PublishTopNResult {
 }
 
 /**
- * Generate a Top N slideshow and schedule/publish it via PostBridge.
- * Used by both the one-off publish endpoint and the cron automation.
+ * Internal: generates slides for a list.
+ * Shared by publishTopN and previewTopN.
  */
-export async function publishTopN(
-  opts: PublishTopNOptions
-): Promise<PublishTopNResult> {
-  const { userId, listId, accountIds, scheduledAt } = opts;
-
+async function generateTopNSlides(userId: string, listId: string, maxBooks?: number) {
   const [lists, allBooks] = await Promise.all([
     getTopNLists(userId),
     getTopBooks(userId),
@@ -47,15 +43,13 @@ export async function publishTopN(
     .map((id) => allBooks.find((b) => b.id === id))
     .filter((b): b is TopBook => !!b);
 
-  // Pinned books are guaranteed to be *included* (never dropped when the pool
-  // is larger than list.count), but their *position* is randomized alongside
-  // everything else — always putting them first is too obvious on TikTok.
   const pinned = poolBooks.filter((b) => b.pinned);
   const unpinned = shuffle(poolBooks.filter((b) => !b.pinned));
 
+  const limit = maxBooks ?? list.count;
   const selected: TopBook[] = [...pinned];
   for (const b of unpinned) {
-    if (selected.length >= list.count) break;
+    if (selected.length >= limit) break;
     selected.push(b);
   }
   if (selected.length === 0) throw new Error("No books selected");
@@ -74,7 +68,6 @@ export async function publishTopN(
 
   const titleBuf = await renderTitleSlide(titleText, bgImage);
 
-  // Sharp Pango text rendering is not parallel-safe; render sequentially.
   const slideBufs: Buffer[] = [titleBuf];
   for (const book of finalOrder) {
     const b64 = book.coverData.includes(",") ? book.coverData.split(",")[1] : book.coverData;
@@ -82,6 +75,18 @@ export async function publishTopN(
     const buf = await renderBookSlide(coverBuf, book.title, book.author, bgImage);
     slideBufs.push(buf);
   }
+
+  return { list, slideBufs, finalOrder };
+}
+
+/**
+ * Generate a Top N slideshow and schedule/publish it via PostBridge.
+ */
+export async function publishTopN(
+  opts: PublishTopNOptions
+): Promise<PublishTopNResult> {
+  const { userId, listId, accountIds, scheduledAt } = opts;
+  const { list, slideBufs, finalOrder } = await generateTopNSlides(userId, listId);
 
   const isVideo = opts.platform === "tiktok-video" || opts.platform === "fb-video" || opts.platform === "ig-video";
 
@@ -130,6 +135,14 @@ export async function publishTopN(
     slides: slideBufs.length,
     books: finalOrder.map((b) => b.title),
   };
+}
+
+/**
+ * Generate a preview video for a list (no upload, no posting).
+ */
+export async function previewTopN(userId: string, listId: string): Promise<Buffer> {
+  const { slideBufs } = await generateTopNSlides(userId, listId);
+  return renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2 });
 }
 
 export type { TopNList };
