@@ -122,12 +122,23 @@ export async function GET(req: NextRequest) {
   const debugLog: string[] = [];
 
   try {
+    // Acquire a Redis lock to prevent concurrent cron runs from creating duplicates.
+    // The non-atomic read-then-write in markScheduled allows overlapping runs to both
+    // read the same scheduled set and double-post. A lock ensures only one runs at a time.
+    const CRON_LOCK_KEY = "cron-lock";
+    const lockAcquired = await redis.set(CRON_LOCK_KEY, Date.now(), { nx: true, ex: 300 });
+    if (!lockAcquired) {
+      return NextResponse.json({ ok: true, skipped: true, reason: "Another cron run in progress" });
+    }
+
+    let cronResult;
+    try {
+
     const [allAccounts, users, scheduledToday] = await Promise.all([
       listTikTokAccounts(),
       listUsers(),
       getScheduledToday(),
     ]);
-    const newlyScheduled: string[] = []; // entries to mark after successful scheduling
 
     const nowUtc = new Date();
     debugLog.push(`Running at ${nowUtc.toISOString()}, ${users.length} users, ${allAccounts.length} PB accounts`);
@@ -389,6 +400,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, dryRun: true, jobCount: jobs.length, debugLog });
     }
 
+    // Mark all job keys as scheduled NOW — before heavy work starts.
+    // This prevents duplicate scheduling when concurrent cron runs overlap.
+    const allSchedKeys = jobs.map((j) => j.schedKey);
+    if (allSchedKeys.length > 0) {
+      await markScheduled(allSchedKeys);
+    }
+
     // Phase 2: generate all images in parallel
     const images = await Promise.all(
       jobs.map(async (job) => {
@@ -451,7 +469,6 @@ export async function GET(req: NextRequest) {
           job,
           status: `scheduled ${job.slideTexts.length} slides for ${scheduledAt.toISOString()} (${job.source}) [post:${postId}]`,
         });
-        newlyScheduled.push(job.schedKey);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         postResults.push({ job, status: `error: ${msg}` });
@@ -503,6 +520,18 @@ export async function GET(req: NextRequest) {
       status: string;
     }> = [];
 
+    // Pre-collect TopN jobs across all users, mark schedule keys upfront
+    interface TopNJob {
+      user: typeof users[0];
+      accIdStr: string;
+      accConfig: Awaited<ReturnType<typeof getTopNAutomation>>["accounts"][string];
+      selectedList: Awaited<ReturnType<typeof getTopNLists>>[0];
+      activeWindows: { start: string; end: string }[];
+      schedKeys: string[];
+    }
+    const topNJobs: TopNJob[] = [];
+    const topNAutoByUser = new Map<string, { auto: Awaited<ReturnType<typeof getTopNAutomation>>; updated: Record<string, typeof topNJobs[0]["accConfig"]> }>();
+
     for (const user of users) {
       try {
         const [topNLists, topNAuto] = await Promise.all([
@@ -510,8 +539,8 @@ export async function GET(req: NextRequest) {
           getTopNAutomation(user.id),
         ]);
         const today = new Date().toISOString().slice(0, 10);
-        let topNUpdated = false;
         const updatedTopNAccounts = { ...topNAuto.accounts };
+        topNAutoByUser.set(user.id, { auto: topNAuto, updated: updatedTopNAccounts });
 
         for (const [accIdStr, accConfig] of Object.entries(topNAuto.accounts)) {
           if (!accConfig.enabled || accConfig.intervals.length === 0) continue;
@@ -531,77 +560,117 @@ export async function GET(req: NextRequest) {
           }
           if (pool.length === 0) continue;
 
-          // Check if any window is eligible (future today + not yet scheduled)
           const activeWindows = accConfig.intervals.filter((w) => {
             const sk = `topn:${user.id}:${accIdStr}:${w.start}`;
             return shouldProcessWindow(w.start, forceHour) && !scheduledToday.has(sk);
           });
           if (activeWindows.length === 0) continue;
 
-          // Round-robin: pick one list
           const listIndex = accConfig.pointer % pool.length;
           const selectedList = pool[listIndex];
+          const schedKeys = activeWindows.map((w) => `topn:${user.id}:${accIdStr}:${w.start}`);
 
-          for (const win of activeWindows) {
-            const topnSchedKey = `topn:${user.id}:${accIdStr}:${win.start}`;
-            try {
-              const scheduledAt = randomTimeInWindow(win.start, win.end);
-              const r = await publishTopN({
-                userId: user.id,
-                listId: selectedList.id,
-                accountIds: [Number(accIdStr)],
-                scheduledAt: scheduledAt.toISOString(),
-                platform: accConfig.platform,
-              });
-              topNResults.push({
-                userId: user.id,
-                listName: selectedList.name,
-                status: `${accIdStr}: scheduled ${r.slides} slides for ${scheduledAt.toISOString()} [post:${r.postId}]`,
-              });
-              newlyScheduled.push(topnSchedKey);
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              topNResults.push({
-                userId: user.id,
-                listName: selectedList.name,
-                status: `error (${accIdStr}): ${msg}`,
-              });
-            }
-          }
+          topNJobs.push({ user, accIdStr, accConfig, selectedList, activeWindows, schedKeys });
 
           updatedTopNAccounts[accIdStr] = {
             ...accConfig,
             pointer: accConfig.pointer + 1,
             lastPostDate: today,
           };
-          topNUpdated = true;
-        }
-
-        if (topNUpdated) {
-          await setTopNAutomation(user.id, { accounts: updatedTopNAccounts });
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        topNResults.push({
-          userId: user.id,
-          listName: "(topn-auto)",
-          status: `error: ${msg}`,
-        });
+        topNResults.push({ userId: user.id, listName: "(topn-auto)", status: `error: ${msg}` });
       }
+    }
+
+    // Mark ALL TopN schedule keys NOW before heavy work
+    const allTopNSchedKeys = topNJobs.flatMap((j) => j.schedKeys);
+    if (allTopNSchedKeys.length > 0) {
+      await markScheduled(allTopNSchedKeys);
+    }
+
+    // Now do heavy work
+    for (const topNJob of topNJobs) {
+      for (const win of topNJob.activeWindows) {
+        try {
+          const scheduledAt = randomTimeInWindow(win.start, win.end);
+          const r = await publishTopN({
+            userId: topNJob.user.id,
+            listId: topNJob.selectedList.id,
+            accountIds: [Number(topNJob.accIdStr)],
+            scheduledAt: scheduledAt.toISOString(),
+            platform: topNJob.accConfig.platform,
+          });
+          topNResults.push({
+            userId: topNJob.user.id,
+            listName: topNJob.selectedList.name,
+            status: `${topNJob.accIdStr}: scheduled ${r.slides} slides for ${scheduledAt.toISOString()} [post:${r.postId}]`,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          topNResults.push({
+            userId: topNJob.user.id,
+            listName: topNJob.selectedList.name,
+            status: `error (${topNJob.accIdStr}): ${msg}`,
+          });
+        }
+      }
+    }
+
+    // Save updated pointers
+    for (const [userId, { updated }] of topNAutoByUser) {
+      try {
+        await setTopNAutomation(userId, { accounts: updated });
+      } catch {}
     }
 
     // Phase 6: IG slideshow automation — per-account config (sequential — sharp Pango)
     const igAutoResults: Array<{ userId: string; status: string }> = [];
+
+    // Pre-collect all IG schedule keys across all users and mark upfront
+    const igSchedKeysToMark: string[] = [];
+    const igUserData: Array<{
+      user: typeof users[0];
+      igAuto: Awaited<ReturnType<typeof getIgAutomation>>;
+      igSlideshows: Awaited<ReturnType<typeof getIgSlideshows>>;
+      allowedIds: number[] | undefined;
+    }> = [];
+
     for (const user of users) {
       try {
         const igAuto = await getIgAutomation(user.id);
         if (!igAuto.accounts || Object.keys(igAuto.accounts).length === 0) continue;
-
         const igSlideshows = await getIgSlideshows(user.id);
         if (igSlideshows.length === 0) continue;
-
         const settings = await getAppSettings(user.id);
         const allowedIds = settings.allowedAccountIds;
+        igUserData.push({ user, igAuto, igSlideshows, allowedIds });
+
+        for (const [accIdStr, accConfig] of Object.entries(igAuto.accounts)) {
+          if (!accConfig.enabled || accConfig.intervals.length === 0) continue;
+          const accId = Number(accIdStr);
+          if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(accId)) continue;
+          for (const win of accConfig.intervals) {
+            const igSchedKey = `ig:${user.id}:${accIdStr}:${win.start}`;
+            if (shouldProcessWindow(win.start, forceHour) && !scheduledToday.has(igSchedKey)) {
+              igSchedKeysToMark.push(igSchedKey);
+            }
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        igAutoResults.push({ userId: user.id, status: `IG automation error: ${msg}` });
+      }
+    }
+
+    if (igSchedKeysToMark.length > 0) {
+      await markScheduled(igSchedKeysToMark);
+    }
+
+    // Now do heavy work for IG
+    for (const { user, igAuto, igSlideshows, allowedIds } of igUserData) {
+      try {
         let updated = false;
         const updatedAccounts = { ...igAuto.accounts };
 
@@ -610,7 +679,6 @@ export async function GET(req: NextRequest) {
           const accId = Number(accIdStr);
           if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(accId)) continue;
 
-          // Build pool: filter by books, then by specific slideshows
           let pool = igSlideshows;
           if (accConfig.bookIds.length > 0) {
             pool = pool.filter((s) => s.sourceBookId && accConfig.bookIds.includes(s.sourceBookId));
@@ -649,7 +717,6 @@ export async function GET(req: NextRequest) {
                 mediaIds.push(await uploadPng(slideBufs[j], `ig-auto-${accIdStr}-${j + 1}.png`));
               }
 
-              // Determine platform config based on legacy lists
               const isIg = igAuto.igAccountIds?.includes(accId) || !igAuto.tiktokAccountIds?.includes(accId);
               const platformCfg = isIg
                 ? { instagram: {} }
@@ -671,7 +738,6 @@ export async function GET(req: NextRequest) {
                 userId: user.id,
                 status: `${ss.name} → ${accIdStr} at ${scheduledAt.toISOString()} [post:${postId}]`,
               });
-              newlyScheduled.push(igSchedKey);
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
               igAutoResults.push({ userId: user.id, status: `error (${accIdStr}): ${msg}` });
@@ -693,10 +759,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Mark all successfully scheduled entries so future cron runs today skip them
-    await markScheduled(newlyScheduled);
+    cronResult = NextResponse.json({ ok: true, results, topNResults, igAutoResults, debugLog });
 
-    return NextResponse.json({ ok: true, results, topNResults, igAutoResults, debugLog });
+    } finally {
+      await redis.del(CRON_LOCK_KEY).catch(() => {});
+    }
+
+    return cronResult;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });
