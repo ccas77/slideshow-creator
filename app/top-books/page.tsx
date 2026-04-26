@@ -40,6 +40,12 @@ interface TopNList {
   bookIds: string[];
   captions: string[];
   backgroundPrompts: string[];
+  musicTrackIds?: string[];
+}
+
+interface MusicTrack {
+  id: string;
+  name: string;
 }
 
 interface TikTokAccount {
@@ -79,6 +85,7 @@ export default function TopBooksPage() {
   const [listBookIds, setListBookIds] = useState<string[]>([]);
   const [listCaptions, setListCaptions] = useState("");
   const [listBgPrompts, setListBgPrompts] = useState("");
+  const [listMusicTrackIds, setListMusicTrackIds] = useState<string[]>([]);
 
   // Publish
   const [publishListId, setPublishListId] = useState<string | null>(null);
@@ -92,8 +99,16 @@ export default function TopBooksPage() {
   const [selectedTopnAccount, setSelectedTopnAccount] = useState<string>("");
   const [savingAuto, setSavingAuto] = useState(false);
 
+  // Music
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
+  const [uploadingMusic, setUploadingMusic] = useState(false);
+
+  // Preview
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [generatingVideoForList, setGeneratingVideoForList] = useState<string | null>(null);
+
   // Active tab
-  const [tab, setTab] = useState<"books" | "lists" | "automation">("books");
+  const [tab, setTab] = useState<"books" | "lists" | "music" | "automation">("books");
 
   const headers = useCallback(() => {
     return { "Content-Type": "application/json" };
@@ -102,13 +117,14 @@ export default function TopBooksPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [bRes, lRes, aRes, igRes, fbRes, autoRes] = await Promise.all([
+      const [bRes, lRes, aRes, igRes, fbRes, autoRes, musicRes] = await Promise.all([
         fetch(`/api/top-books`),
         fetch(`/api/top-n-lists`),
         fetch(`/api/post-tiktok`),
         fetch(`/api/post-tiktok?platform=instagram`),
         fetch(`/api/post-tiktok?platform=facebook`),
         fetch(`/api/topn-automation`),
+        fetch(`/api/music-tracks`),
       ]);
       if (bRes.ok) setBooks((await bRes.json()).books || []);
       if (lRes.ok) setLists((await lRes.json()).lists || []);
@@ -119,6 +135,7 @@ export default function TopBooksPage() {
         const autoData = await autoRes.json();
         setTopnAutoConfig(autoData.config || { accounts: {} });
       }
+      if (musicRes.ok) setMusicTracks((await musicRes.json()).tracks || []);
     } catch {}
     setLoading(false);
   }, []);
@@ -284,6 +301,7 @@ export default function TopBooksPage() {
       setListBookIds(list.bookIds);
       setListCaptions((list.captions || []).join("\n\n"));
       setListBgPrompts((list.backgroundPrompts || []).join("\n"));
+      setListMusicTrackIds(list.musicTrackIds || []);
     } else {
       setEditListId(null);
       setListName("");
@@ -292,6 +310,7 @@ export default function TopBooksPage() {
       setListBookIds([]);
       setListCaptions("");
       setListBgPrompts("");
+      setListMusicTrackIds([]);
     }
     setShowListForm(true);
   }
@@ -306,7 +325,7 @@ export default function TopBooksPage() {
     if (editListId) {
       updated = updated.map((l: TopNList) =>
         l.id === editListId
-          ? { ...l, name: listName, titleTexts: parsedTitles, count: listCount, bookIds: listBookIds, captions: parsedCaptions, backgroundPrompts: parsedBgPrompts }
+          ? { ...l, name: listName, titleTexts: parsedTitles, count: listCount, bookIds: listBookIds, captions: parsedCaptions, backgroundPrompts: parsedBgPrompts, musicTrackIds: listMusicTrackIds }
           : l
       );
     } else {
@@ -318,6 +337,7 @@ export default function TopBooksPage() {
         bookIds: listBookIds,
         captions: parsedCaptions,
         backgroundPrompts: parsedBgPrompts,
+        musicTrackIds: listMusicTrackIds,
       });
     }
     await fetch(`/api/top-n-lists`, {
@@ -341,6 +361,109 @@ export default function TopBooksPage() {
     setListBookIds((prev) =>
       prev.includes(bookId) ? prev.filter((id) => id !== bookId) : [...prev, bookId]
     );
+  }
+
+  // ── Music ──
+
+  async function handleMusicUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingMusic(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+      }
+      const base64 = btoa(binary);
+      const mimeType = file.type || "audio/mpeg";
+      const audioData = `data:${mimeType};base64,${base64}`;
+
+      const name = file.name.replace(/\.[^.]+$/, "");
+      const CHUNK_SIZE = 3_000_000;
+
+      if (audioData.length <= CHUNK_SIZE) {
+        await fetch("/api/music-tracks", {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ name, audioData }),
+        });
+      } else {
+        const totalChunks = Math.ceil(audioData.length / CHUNK_SIZE);
+        const firstChunk = audioData.slice(0, CHUNK_SIZE);
+        const res = await fetch("/api/music-tracks", {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ name, audioData: firstChunk, chunked: true, chunkIndex: 0, totalChunks }),
+        });
+        const { id } = await res.json();
+
+        for (let i = 1; i < totalChunks; i++) {
+          const chunk = audioData.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+          await fetch("/api/music-tracks", {
+            method: "POST",
+            headers: headers(),
+            body: JSON.stringify({ id, audioData: chunk, chunked: true, chunkIndex: i, totalChunks }),
+          });
+        }
+      }
+      await load();
+    } catch (err) {
+      alert("Upload failed: " + (err instanceof Error ? err.message : "Unknown error"));
+    }
+    setUploadingMusic(false);
+    e.target.value = "";
+  }
+
+  async function deleteMusic(id: string) {
+    if (!window.confirm("Delete this track?")) return;
+    await fetch("/api/music-tracks", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "delete", id }),
+    });
+    await load();
+  }
+
+  function toggleMusicInList(trackId: string) {
+    setListMusicTrackIds((prev) =>
+      prev.includes(trackId) ? prev.filter((id) => id !== trackId) : [...prev, trackId]
+    );
+  }
+
+  // ── Video Preview ──
+
+  async function generateVideoPreview(listId: string) {
+    setGeneratingVideoForList(listId);
+    if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    setVideoPreviewUrl(null);
+    try {
+      const res = await fetch(`/api/top-n-preview?listId=${listId}`, {
+        signal: AbortSignal.timeout(300000),
+      });
+      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok || !contentType.includes("video")) {
+        const text = await res.text();
+        let errMsg = `${res.status} ${res.statusText}`;
+        try {
+          const data = JSON.parse(text);
+          errMsg = data.error || errMsg;
+        } catch {
+          if (text.length < 500) errMsg = text || errMsg;
+        }
+        alert("Preview failed: " + errMsg);
+        setGeneratingVideoForList(null);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setVideoPreviewUrl(url);
+    } catch (err) {
+      alert("Preview failed: " + (err instanceof Error ? err.message : "Unknown error"));
+    }
+    setGeneratingVideoForList(null);
   }
 
   // ── Publish ──
@@ -474,7 +597,7 @@ export default function TopBooksPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">
-          {(["books", "lists", "automation"] as const).map((t) => (
+          {(["books", "lists", "music", "automation"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -482,7 +605,7 @@ export default function TopBooksPage() {
                 tab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
               }`}
             >
-              {t === "books" ? `Books (${books.length})` : t === "lists" ? `Lists (${lists.length})` : `Automation (${configuredCount})`}
+              {t === "books" ? `Books (${books.length})` : t === "lists" ? `Lists (${lists.length})` : t === "music" ? `Music (${musicTracks.length})` : `Automation (${configuredCount})`}
             </button>
           ))}
         </div>
@@ -583,6 +706,13 @@ export default function TopBooksPage() {
                         </div>
                         <div className="flex gap-2 shrink-0">
                           <button
+                            onClick={() => generateVideoPreview(l.id)}
+                            disabled={generatingVideoForList !== null}
+                            className="text-xs text-purple-500 hover:text-purple-600 transition-colors disabled:text-gray-400"
+                          >
+                            {generatingVideoForList === l.id ? "Generating..." : "Preview Video"}
+                          </button>
+                          <button
                             onClick={() => { setPublishListId(l.id); setPublishAccounts([]); setPublishResult(null); setScheduledAt(""); }}
                             className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors shadow-sm"
                           >
@@ -602,6 +732,44 @@ export default function TopBooksPage() {
               </div>
             )}
           </>
+        )}
+
+        {/* MUSIC TAB */}
+        {tab === "music" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Music Tracks</h2>
+              <label className={`px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition-colors shadow-sm ${uploadingMusic ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-600"}`}>
+                {uploadingMusic ? "Uploading..." : "+ Upload Track"}
+                <input type="file" accept="audio/*" onChange={handleMusicUpload} className="hidden" disabled={uploadingMusic} />
+              </label>
+            </div>
+            <p className="text-xs text-gray-500">Upload MP3 or M4A files. Assign them to lists in the list editor. A random track is picked for each video post.</p>
+            {musicTracks.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-8">No music tracks yet. Upload one to get started.</p>
+            ) : (
+              <div className="space-y-3">
+                {musicTracks.map((t) => {
+                  const usedIn = lists.filter((l) => l.musicTrackIds?.includes(t.id)).map((l) => l.name);
+                  const audioUrl = `/api/music-tracks?id=${t.id}`;
+                  return (
+                    <div key={t.id} className="bg-white rounded-2xl px-4 py-3 border border-gray-200/60 shadow-sm space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-gray-900 text-sm">{t.name}</span>
+                          {usedIn.length > 0 && (
+                            <span className="text-xs text-purple-500 ml-2">Used in: {usedIn.join(", ")}</span>
+                          )}
+                        </div>
+                        <button onClick={() => deleteMusic(t.id)} className="text-xs text-red-500 hover:text-red-600 transition-colors">Delete</button>
+                      </div>
+                      <audio controls preload="none" src={audioUrl} className="w-full h-8" />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {/* AUTOMATION TAB */}
@@ -900,6 +1068,33 @@ export default function TopBooksPage() {
               </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-2">
+                  Music tracks for video posts ({listMusicTrackIds.length} selected)
+                </label>
+                {musicTracks.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {musicTracks.map((t) => {
+                      const selected = listMusicTrackIds.includes(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => toggleMusicInList(t.id)}
+                          className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                            selected
+                              ? "bg-purple-50 border-purple-500 text-purple-600 border"
+                              : "border border-gray-200 text-gray-500 hover:border-gray-300"
+                          }`}
+                        >
+                          {t.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-400 mb-2">No music tracks uploaded yet. Upload tracks in the Music tab.</p>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-2">
                   Select books ({listBookIds.length} selected, {books.filter((b) => b.pinned).length} pinned)
                 </label>
                 <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto">
@@ -932,6 +1127,35 @@ export default function TopBooksPage() {
         )}
 
         {/* PUBLISH MODAL */}
+        {/* VIDEO GENERATING OVERLAY */}
+        {generatingVideoForList && !videoPreviewUrl && (
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="animate-spin w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full mb-4" />
+            <p className="text-gray-900 text-sm font-medium">Generating video preview...</p>
+            <p className="text-gray-500 text-xs mt-1">This can take up to a minute</p>
+          </div>
+        )}
+
+        {/* VIDEO PREVIEW MODAL */}
+        {videoPreviewUrl && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => { URL.revokeObjectURL(videoPreviewUrl); setVideoPreviewUrl(null); }}>
+            <div className="relative w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+              <video
+                src={videoPreviewUrl}
+                controls
+                autoPlay
+                className="w-full rounded-2xl shadow-2xl"
+              />
+              <button
+                onClick={() => { URL.revokeObjectURL(videoPreviewUrl); setVideoPreviewUrl(null); }}
+                className="w-full text-xs text-gray-500 hover:text-gray-900 transition-colors py-2 mt-2"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
         {publishListId && (
           <Modal onClose={() => setPublishListId(null)} title="Publish Top N">
             <div className="space-y-4">

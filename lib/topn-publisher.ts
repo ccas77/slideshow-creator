@@ -1,4 +1,4 @@
-import { TopBook, TopNList, getTopBooks, getTopNLists } from "@/lib/kv";
+import { TopBook, TopNList, getTopBooks, getTopNLists, getMusicTrack } from "@/lib/kv";
 import { generateImage } from "@/lib/gemini";
 import { renderTitleSlide, renderBookSlide } from "@/lib/render-topn-slide";
 import { uploadPng, uploadVideo, pbFetch } from "@/lib/post-bridge";
@@ -76,7 +76,18 @@ async function generateTopNSlides(userId: string, listId: string, maxBooks?: num
     slideBufs.push(buf);
   }
 
-  return { list, slideBufs, finalOrder };
+  // Fetch a random music track if the list has any assigned
+  let audioBuffer: Buffer | undefined;
+  if (list.musicTrackIds && list.musicTrackIds.length > 0) {
+    const trackId = list.musicTrackIds[Math.floor(Math.random() * list.musicTrackIds.length)];
+    const track = await getMusicTrack(userId, trackId);
+    if (track) {
+      const b64 = track.audioData.includes(",") ? track.audioData.split(",")[1] : track.audioData;
+      audioBuffer = Buffer.from(b64, "base64");
+    }
+  }
+
+  return { list, slideBufs, finalOrder, audioBuffer };
 }
 
 /**
@@ -86,13 +97,13 @@ export async function publishTopN(
   opts: PublishTopNOptions
 ): Promise<PublishTopNResult> {
   const { userId, listId, accountIds, scheduledAt } = opts;
-  const { list, slideBufs, finalOrder } = await generateTopNSlides(userId, listId);
+  const { list, slideBufs, finalOrder, audioBuffer } = await generateTopNSlides(userId, listId);
 
   const isVideo = opts.platform === "tiktok-video" || opts.platform === "fb-video" || opts.platform === "ig-video";
 
   const mediaIds: string[] = [];
   if (isVideo) {
-    const videoBuf = await renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2 });
+    const videoBuf = await renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2, audioBuffer });
     const mediaId = await uploadVideo(videoBuf, "topn-video.mp4");
     mediaIds.push(mediaId);
   } else {
@@ -141,8 +152,8 @@ export async function publishTopN(
  * Generate a preview video for a list (no upload, no posting).
  */
 export async function previewTopN(userId: string, listId: string): Promise<Buffer> {
-  const { slideBufs } = await generateTopNSlides(userId, listId);
-  return renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2 });
+  const { slideBufs, audioBuffer } = await generateTopNSlides(userId, listId);
+  return renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2, audioBuffer });
 }
 
 export type { TopNList };

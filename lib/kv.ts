@@ -236,8 +236,10 @@ export interface TopNList {
   titleTexts: string[];
   count: number;
   bookIds: string[];
+  genres?: string[]; // Auto-select books matching these genres (merged with bookIds)
   captions: string[];
   backgroundPrompts?: string[];
+  musicTrackIds?: string[]; // Pool of music tracks for video posts (random pick)
   automation?: TopNAutomation;
 }
 
@@ -395,6 +397,48 @@ export async function getIgAutomation(userId: string): Promise<IgGlobalAutomatio
 
 export async function setIgAutomation(userId: string, config: IgGlobalAutomation): Promise<void> {
   await redis.set(igAutomationKey(userId), config);
+}
+
+// ── Music Tracks (per-user) ──
+
+export interface MusicTrack {
+  id: string;
+  name: string;
+  audioData: string; // base64 data URL (audio/mpeg or audio/mp4)
+}
+
+const musicIndexKey = (userId: string) => `u:${userId}:music-tracks-index`;
+const musicTrackKey = (userId: string, id: string) =>
+  `u:${userId}:music-track:${id}`;
+
+export async function getMusicTracks(userId: string): Promise<MusicTrack[]> {
+  const ids = await redis.get<string[]>(musicIndexKey(userId));
+  if (!ids || ids.length === 0) return [];
+  const tracks: MusicTrack[] = [];
+  for (const id of ids) {
+    const track = await redis.get<MusicTrack>(musicTrackKey(userId, id));
+    if (track) tracks.push(track);
+  }
+  return tracks;
+}
+
+export async function getMusicTrack(userId: string, id: string): Promise<MusicTrack | null> {
+  return await redis.get<MusicTrack>(musicTrackKey(userId, id));
+}
+
+export async function setMusicTrack(userId: string, track: MusicTrack): Promise<void> {
+  await redis.set(musicTrackKey(userId, track.id), track);
+  const ids = (await redis.get<string[]>(musicIndexKey(userId))) || [];
+  if (!ids.includes(track.id)) {
+    ids.push(track.id);
+    await redis.set(musicIndexKey(userId), ids);
+  }
+}
+
+export async function deleteMusicTrack(userId: string, id: string): Promise<void> {
+  await redis.del(musicTrackKey(userId, id));
+  const ids = (await redis.get<string[]>(musicIndexKey(userId))) || [];
+  await redis.set(musicIndexKey(userId), ids.filter((i) => i !== id));
 }
 
 // ── Settings (per-user) ──
