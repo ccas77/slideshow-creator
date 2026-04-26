@@ -99,11 +99,12 @@ interface Job {
 }
 
 export async function GET(req: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
+  }
   const auth = req.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    auth !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
+  if (auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -224,7 +225,6 @@ export async function GET(req: NextRequest) {
       const { user, data, books } = owner;
 
       try {
-          accountDataMap.set(`${user.id}:${acc.id}`, data);
           if (!data.config.enabled) {
             debugLog.push(`Account ${acc.username} (${acc.id}): disabled`);
             continue;
