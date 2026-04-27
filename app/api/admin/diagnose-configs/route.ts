@@ -12,12 +12,13 @@ function parseTime(t: string): number {
 }
 
 function isValidWindow(start: string, end: string): boolean {
-  const s = parseTime(start);
-  const e = parseTime(end);
   const [sh] = start.split(":").map(Number);
   const [eh] = end.split(":").map(Number);
   if (sh < 0 || sh > 23 || eh < 0 || eh > 23) return false;
-  if (e <= s) return false;
+  // Allow midnight-crossing windows (e.g. 22:00→00:30) — only reject identical start/end
+  const s = parseTime(start);
+  const e = parseTime(end);
+  if (e === s) return false;
   return true;
 }
 

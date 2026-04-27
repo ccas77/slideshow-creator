@@ -65,7 +65,8 @@ function randomTimeInWindow(windowStart: string, windowEnd: string): Date {
   const [eh, em] = windowEnd.split(":").map(Number);
   const startMin = sh * 60 + sm;
   let endMin = eh * 60 + em;
-  if (endMin <= startMin) endMin = startMin + 60;
+  // Midnight wrap: e.g. 22:00→00:30 becomes 1320→1470 (next day)
+  if (endMin <= startMin) endMin += 1440;
   const pickMin = startMin + Math.floor(Math.random() * (endMin - startMin));
 
   const now = new Date();
