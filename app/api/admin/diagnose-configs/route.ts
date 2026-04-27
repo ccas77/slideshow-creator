@@ -49,8 +49,14 @@ interface RawAccountData {
 }
 
 export async function GET(req: NextRequest) {
-  const { error } = await requireAdmin(req);
-  if (error) return error;
+  // Allow session-based admin auth OR ADMIN_PASSWORD query param for CLI access
+  const url = new URL(req.url);
+  const pw = url.searchParams.get("password") || req.headers.get("x-password");
+  const adminPw = process.env.ADMIN_PASSWORD;
+  if (!(pw && adminPw && pw === adminPw)) {
+    const { error } = await requireAdmin(req);
+    if (error) return error;
+  }
 
   try {
     const [allAccounts, users] = await Promise.all([
