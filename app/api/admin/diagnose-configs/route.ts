@@ -58,6 +58,19 @@ export async function GET(req: NextRequest) {
   const passwordMatch = pw && adminPw && pw === adminPw;
   const cronMatch = bearerToken && cronSecret && bearerToken === cronSecret;
   if (!passwordMatch && !cronMatch) {
+    // Debug: return info about what we received vs expected (no secrets leaked — just lengths and prefixes)
+    if (url.searchParams.get("debug") === "1") {
+      return NextResponse.json({
+        hasPw: !!pw,
+        hasAdminPw: !!adminPw,
+        hasBearer: !!bearerToken,
+        hasCronSecret: !!cronSecret,
+        bearerLen: bearerToken?.length,
+        cronSecretLen: cronSecret?.length,
+        bearerPrefix: bearerToken?.slice(0, 4),
+        cronSecretPrefix: cronSecret?.slice(0, 4),
+      });
+    }
     const { error } = await requireAdmin(req);
     if (error) return error;
   }
