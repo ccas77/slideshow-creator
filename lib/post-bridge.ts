@@ -7,12 +7,20 @@ async function fetchWithRetry(
   init: RequestInit,
   retries = MAX_RETRIES
 ): Promise<Response> {
+  const method = (init.method || "GET").toUpperCase();
   const res = await fetch(url, init);
-  if (res.status === 429 && retries > 0) {
-    const wait = Math.pow(2, MAX_RETRIES - retries) * 1000; // 1s, 2s, 4s
-    console.log(`[post-bridge] 429 rate limited, retrying in ${wait}ms...`);
-    await new Promise((r) => setTimeout(r, wait));
-    return fetchWithRetry(url, init, retries - 1);
+  if (res.status === 429) {
+    if (method !== "GET") {
+      const path = url.replace(PB_BASE, "");
+      console.log(`[post-bridge] 429 on ${method} ${path} — NOT retrying to avoid duplicate posts. Caller should handle.`);
+      return res;
+    }
+    if (retries > 0) {
+      const wait = Math.pow(2, MAX_RETRIES - retries) * 1000; // 1s, 2s, 4s
+      console.log(`[post-bridge] 429 rate limited on GET, retrying in ${wait}ms...`);
+      await new Promise((r) => setTimeout(r, wait));
+      return fetchWithRetry(url, init, retries - 1);
+    }
   }
   return res;
 }
