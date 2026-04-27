@@ -230,21 +230,7 @@ export async function GET(req: NextRequest) {
             continue;
           }
 
-          let windows: Array<{ start: string; end: string }> = [];
-          if (data.config.intervals && data.config.intervals.length > 0) {
-            windows = data.config.intervals;
-          } else {
-            windows.push({
-              start: data.config.windowStart,
-              end: data.config.windowEnd,
-            });
-            if (data.config.windowStart2 && data.config.windowEnd2) {
-              windows.push({
-                start: data.config.windowStart2,
-                end: data.config.windowEnd2,
-              });
-            }
-          }
+          const windows = data.config.intervals;
 
           debugLog.push(`Account ${acc.username} (${acc.id}) [owner:${user.id} ${user.role}]: enabled, windows: ${JSON.stringify(windows)}`);
 
@@ -260,36 +246,22 @@ export async function GET(req: NextRequest) {
             let source = "";
             let coverImage: string | undefined;
 
-            const { bookId, slideshowIds, selections } = data.config;
             const candidates: Array<{
               book: (typeof books)[0];
               slideshow: (typeof books)[0]["slideshows"][0];
             }> = [];
 
-            debugLog.push(`  Config: selections=${JSON.stringify(selections?.length ?? 'none')}, bookId=${bookId ?? 'none'}, slideshowIds=${JSON.stringify(slideshowIds?.length ?? 'none')}`);
+            debugLog.push(`  Config: selections=${data.config.selections.length}`);
 
-            if (selections && selections.length > 0) {
-              for (const sel of selections) {
-                const book = books.find((b) => b.id === sel.bookId);
-                const slideshow = book?.slideshows.find(
-                  (s) => s.id === sel.slideshowId
-                );
-                if (book && slideshow) {
-                  candidates.push({ book, slideshow });
-                } else {
-                  debugLog.push(`  Selection miss: bookId=${sel.bookId} found=${!!book}, slideshowId=${sel.slideshowId} found=${!!slideshow}`);
-                }
-              }
-            } else if (bookId && slideshowIds && slideshowIds.length > 0) {
-              const book = books.find((b) => b.id === bookId);
-              if (book) {
-                for (const sid of slideshowIds) {
-                  const slideshow = book.slideshows.find((s) => s.id === sid);
-                  if (slideshow) candidates.push({ book, slideshow });
-                  else debugLog.push(`  Slideshow miss: id=${sid} not in book ${book.name}`);
-                }
+            for (const sel of data.config.selections) {
+              const book = books.find((b) => b.id === sel.bookId);
+              const slideshow = book?.slideshows.find(
+                (s) => s.id === sel.slideshowId
+              );
+              if (book && slideshow) {
+                candidates.push({ book, slideshow });
               } else {
-                debugLog.push(`  Book miss: id=${bookId} not found`);
+                debugLog.push(`  Selection miss: bookId=${sel.bookId} found=${!!book}, slideshowId=${sel.slideshowId} found=${!!slideshow}`);
               }
             }
 

@@ -13,20 +13,75 @@ export interface TimeWindow {
   end: string;   // UTC "HH:MM"
 }
 
-export interface AutomationConfig {
-  enabled: boolean;
-  // Legacy fields (kept for migration)
-  windowStart: string;
-  windowEnd: string;
+// Legacy config shape — used only by migration and diagnostic routes
+export interface LegacyAutomationConfig {
+  enabled?: boolean;
+  windowStart?: string;
+  windowEnd?: string;
   windowStart2?: string;
   windowEnd2?: string;
   postsPerDay?: number;
-  // New: array of posting intervals
   intervals?: TimeWindow[];
   bookId?: string;
   slideshowIds?: string[];
   selections?: Array<{ bookId: string; slideshowId: string }>;
-  pointer?: number; // round-robin index for slideshow selection
+  pointer?: number;
+}
+
+// Canonical config shape — all consumers receive this
+export interface AutomationConfig {
+  enabled: boolean;
+  intervals: TimeWindow[];
+  selections: Array<{ bookId: string; slideshowId: string }>;
+  pointer: number;
+}
+
+// Normalize any stored config to canonical shape.
+// - Prefers intervals over legacy windowStart/windowEnd
+// - Prefers selections over legacy bookId/slideshowIds
+// - Strips all legacy fields from output
+//
+// Example inputs → outputs:
+//   { enabled: true, windowStart: "18:00", windowEnd: "20:00", bookId: "b1", slideshowIds: ["s1"] }
+//     → { enabled: true, intervals: [{ start: "18:00", end: "20:00" }], selections: [{ bookId: "b1", slideshowId: "s1" }], pointer: 0 }
+//
+//   { enabled: true, intervals: [{ start: "11:00", end: "13:00" }], windowStart: "18:00", windowEnd: "20:00", selections: [{ bookId: "b1", slideshowId: "s1" }] }
+//     → { enabled: true, intervals: [{ start: "11:00", end: "13:00" }], selections: [{ bookId: "b1", slideshowId: "s1" }], pointer: 0 }
+//
+//   { enabled: false }
+//     → { enabled: false, intervals: [{ start: "17:00", end: "19:00" }], selections: [], pointer: 0 }
+export function migrateAutomationConfig(raw: unknown): AutomationConfig {
+  const r = (raw || {}) as LegacyAutomationConfig;
+
+  // Intervals: prefer new field, fall back to building from legacy windows
+  let intervals: TimeWindow[];
+  if (r.intervals && r.intervals.length > 0) {
+    intervals = r.intervals;
+  } else if (r.windowStart && r.windowEnd) {
+    intervals = [{ start: r.windowStart, end: r.windowEnd }];
+    if (r.windowStart2 && r.windowEnd2) {
+      intervals.push({ start: r.windowStart2, end: r.windowEnd2 });
+    }
+  } else {
+    intervals = [{ start: "17:00", end: "19:00" }];
+  }
+
+  // Selections: prefer new field, fall back to building from legacy bookId/slideshowIds
+  let selections: Array<{ bookId: string; slideshowId: string }>;
+  if (r.selections && r.selections.length > 0) {
+    selections = r.selections;
+  } else if (r.bookId && r.slideshowIds && r.slideshowIds.length > 0) {
+    selections = r.slideshowIds.map((sid) => ({ bookId: r.bookId!, slideshowId: sid }));
+  } else {
+    selections = [];
+  }
+
+  return {
+    enabled: !!r.enabled,
+    intervals,
+    selections,
+    pointer: r.pointer ?? 0,
+  };
 }
 
 export interface NamedItem {
@@ -142,7 +197,7 @@ export interface AccountData {
 }
 
 const defaultData = (): AccountData => ({
-  config: { enabled: false, windowStart: "18:00", windowEnd: "20:00" },
+  config: { enabled: false, intervals: [{ start: "17:00", end: "19:00" }], selections: [], pointer: 0 },
   prompts: [],
   texts: [],
   captions: [],
@@ -159,7 +214,8 @@ export async function getAccountData(
   accountId: number
 ): Promise<AccountData> {
   const data = await redis.get<AccountData>(accountKey(userId, accountId));
-  return data ?? defaultData();
+  if (!data) return defaultData();
+  return { ...data, config: migrateAutomationConfig(data.config) };
 }
 
 export async function setAccountData(

@@ -11,6 +11,7 @@ const PUBLIC_API_PREFIXES = [
   "/api/cron", // guarded separately by CRON_SECRET
   "/api/post-results", // guarded separately by CRON_SECRET
   "/api/admin/diagnose-configs", // guarded by ADMIN_PASSWORD / CRON_SECRET / session
+  "/api/admin/migrate-configs",  // guarded by ADMIN_PASSWORD / CRON_SECRET / session
 ];
 
 function isPublicPath(pathname: string): boolean {
