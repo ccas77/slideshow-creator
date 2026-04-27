@@ -144,7 +144,7 @@ export async function GET(req: NextRequest) {
 
 // DELETE: cancel a scheduled post
 export async function DELETE(req: NextRequest) {
-  const { error } = await requireSession(req);
+  const { session, error } = await requireSession(req);
   if (error) return error;
   try {
     const url = new URL(req.url);
@@ -152,16 +152,29 @@ export async function DELETE(req: NextRequest) {
     if (!postId) {
       return NextResponse.json({ error: "postId required" }, { status: 400 });
     }
-    const res = await fetch(`${PB_BASE}/v1/posts/${postId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${process.env.POSTBRIDGE_API_KEY}`,
-      },
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`post-bridge DELETE ${res.status}: ${body}`);
+
+    // Verify the post belongs to one of this user's allowed accounts
+    if (session.role !== "admin") {
+      const settings = await getAppSettings(session.userId);
+      const allowedIds = settings.allowedAccountIds || [];
+
+      // Fetch the post — if it doesn't exist, return 404
+      let post;
+      try {
+        post = await pbFetch(`/v1/posts/${postId}`);
+      } catch {
+        return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      }
+
+      const postAccounts: number[] = post.social_accounts || post.data?.social_accounts || [];
+      const owned = postAccounts.some((id) => allowedIds.includes(id));
+      if (!owned) {
+        return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      }
     }
+
+    // Ownership verified (or admin) — now delete
+    await pbFetch(`/v1/posts/${postId}`, { method: "DELETE" });
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed";
