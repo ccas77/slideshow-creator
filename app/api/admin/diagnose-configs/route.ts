@@ -50,15 +50,11 @@ interface RawAccountData {
 }
 
 export async function GET(req: NextRequest) {
-  // Allow session-based admin auth, ADMIN_PASSWORD, or CRON_SECRET for CLI access
-  const url = new URL(req.url);
-  const pw = url.searchParams.get("password") || req.headers.get("x-password");
+  // Allow session-based admin auth or CRON_SECRET bearer token
   const bearerToken = req.headers.get("authorization")?.replace("Bearer ", "");
-  const adminPw = process.env.ADMIN_PASSWORD;
   const cronSecret = process.env.CRON_SECRET;
-  const passwordMatch = pw && adminPw && pw === adminPw;
   const cronMatch = bearerToken && cronSecret && bearerToken === cronSecret;
-  if (!passwordMatch && !cronMatch) {
+  if (!cronMatch) {
     const { error } = await requireAdmin(req);
     if (error) return error;
   }
