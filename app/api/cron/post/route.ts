@@ -148,6 +148,7 @@ export async function GET(req: NextRequest) {
     // Phase 1: build jobs across all users, respecting each user's allowedAccountIds
     const jobs: Job[] = [];
     const pointerUpdates = new Map<string, number>(); // key = userId:accountId, value = new pointer
+    const promptPointerUpdates = new Map<string, number>(); // key = userId:accountId, value = new promptPointer
     const accountDataMap = new Map<
       string,
       Awaited<ReturnType<typeof getAccountData>>
@@ -294,7 +295,9 @@ export async function GET(req: NextRequest) {
                 linkedPrompts.length > 0 ? linkedPrompts : book.imagePrompts || [];
               const allowedCaptions =
                 linkedCaptions.length > 0 ? linkedCaptions : book.captions || [];
-              const pickedPrompt = pickRandom(allowedPrompts);
+              const currentPromptPointer = promptPointerUpdates.get(ownerKey) ?? (data.config.promptPointer || 0);
+              const pickedPrompt = allowedPrompts.length > 0 ? allowedPrompts[currentPromptPointer % allowedPrompts.length] : null;
+              promptPointerUpdates.set(ownerKey, currentPromptPointer + 1);
               const pickedCaption = pickRandom(allowedCaptions);
               if (!pickedPrompt) {
                 debugLog.push(`  Skip: no image prompts (linked=${linkedPrompts.length}, book=${(book.imagePrompts||[]).length})`);
@@ -473,11 +476,13 @@ export async function GET(req: NextRequest) {
         const data = accountDataMap.get(k);
         if (data) {
           const newPointer = pointerUpdates.get(k);
+          const newPromptPointer = promptPointerUpdates.get(k);
           await setAccountData(userId, accId, {
             ...data,
             config: {
               ...data.config,
               ...(newPointer !== undefined ? { pointer: newPointer } : {}),
+              ...(newPromptPointer !== undefined ? { promptPointer: newPromptPointer } : {}),
             },
             lastRun: new Date().toISOString(),
             lastStatus: status,

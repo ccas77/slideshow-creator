@@ -35,6 +35,8 @@ interface AutomationConfig {
   bookId?: string;
   slideshowIds?: string[];
   selections?: Array<{ bookId: string; slideshowId: string }>;
+  pointer?: number;
+  promptPointer?: number;
 }
 
 interface NamedItem {
@@ -505,13 +507,16 @@ export default function Home() {
   useEffect(() => {
     if (!hydrated || accountId == null || loadingAccount) return;
     const t = setTimeout(() => {
+      // Strip pointer/promptPointer — these are managed by the cron, not the UI.
+      // Saving stale values here would overwrite the cron's updated pointers.
+      const { pointer: _p, promptPointer: _pp, ...configWithoutPointers } = config;
       fetch("/api/account-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           accountId,
           data: {
-            config,
+            config: configWithoutPointers,
             prompts: savedPrompts,
             texts: savedTexts,
             captions: savedCaptions,

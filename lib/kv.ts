@@ -26,6 +26,7 @@ export interface LegacyAutomationConfig {
   slideshowIds?: string[];
   selections?: Array<{ bookId: string; slideshowId: string }>;
   pointer?: number;
+  promptPointer?: number;
 }
 
 // Canonical config shape — all consumers receive this
@@ -34,6 +35,7 @@ export interface AutomationConfig {
   intervals: TimeWindow[];
   selections: Array<{ bookId: string; slideshowId: string }>;
   pointer: number;
+  promptPointer: number;
 }
 
 // Normalize any stored config to canonical shape.
@@ -81,6 +83,7 @@ export function migrateAutomationConfig(raw: unknown): AutomationConfig {
     intervals,
     selections,
     pointer: r.pointer ?? 0,
+    promptPointer: r.promptPointer ?? 0,
   };
 }
 
@@ -197,7 +200,7 @@ export interface AccountData {
 }
 
 const defaultData = (): AccountData => ({
-  config: { enabled: false, intervals: [{ start: "17:00", end: "19:00" }], selections: [], pointer: 0 },
+  config: { enabled: false, intervals: [{ start: "17:00", end: "19:00" }], selections: [], pointer: 0, promptPointer: 0 },
   prompts: [],
   texts: [],
   captions: [],
