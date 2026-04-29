@@ -65,7 +65,7 @@ function toTitleCase(s: string): string {
 }
 
 function cleanTitle(raw: string): string {
-  let t = raw
+  const t = raw
     .replace(/\s*[-|:]\s*(Kindle|Hardcover|Paperback|Audio).*/i, "")
     .replace(/\s*[-|:]\s*Amazon.*/i, "")
     .replace(/\s*\|\s*Goodreads.*/i, "")

@@ -582,7 +582,7 @@ export default function TopBooksPage() {
       <div className="mx-auto w-full max-w-4xl px-6 sm:px-10 py-10">
         <AppHeader />
         <HowItWorks>
-          <p><strong>Top Books</strong> — create curated "Top N" book lists and automate posting them.</p>
+          <p><strong>Top Books</strong> — create curated &quot;Top N&quot; book lists and automate posting them.</p>
           <p>Add books with cover images (upload or paste a URL). The AI can recognize title and author from the cover. Pin books to guarantee they appear in every generated list.</p>
           <p>Create a <strong>list</strong> with a name, title text variations, caption pool, and background prompt pool. When published, it picks N books (pinned ones always included), shuffles the order, and generates a slideshow.</p>
           <p>The <strong>automation</strong> tab lets you configure per-account auto-posting with frequency, list selection, and time windows.</p>

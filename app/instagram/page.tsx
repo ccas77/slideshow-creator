@@ -85,8 +85,6 @@ export default function InstagramPage() {
   const [tab, setTab] = useState<Tab>("slideshows");
 
   // Import
-  const [importBookId, setImportBookId] = useState("");
-  const [importSlideshowId, setImportSlideshowId] = useState("");
   const [truncating, setTruncating] = useState(false);
 
   // Editor (inline on slideshows tab)
@@ -148,11 +146,9 @@ export default function InstagramPage() {
 
   // ── Import ──
 
-  async function importSlideshow(bookIdOverride?: string, slideshowIdOverride?: string, bulk?: boolean): Promise<InstagramSlideshow | undefined> {
-    const bId = bookIdOverride || importBookId;
-    const sId = slideshowIdOverride || importSlideshowId;
-    const book = books.find((b) => b.id === bId);
-    const slideshow = book?.slideshows.find((s) => s.id === sId);
+  async function importSlideshow(bookId: string, slideshowId: string, bulk?: boolean): Promise<InstagramSlideshow | undefined> {
+    const book = books.find((b) => b.id === bookId);
+    const slideshow = book?.slideshows.find((s) => s.id === slideshowId);
     if (!book || !slideshow) return;
 
     const lines = slideshow.slideTexts.split("\n").filter((l) => l.trim());
@@ -204,8 +200,6 @@ export default function InstagramPage() {
       setEditingId(newIg.id);
       setEditDraft(newIg);
     }
-    setImportBookId("");
-    setImportSlideshowId("");
   }
 
   // ── Editor ──
@@ -327,8 +321,6 @@ export default function InstagramPage() {
     } catch {}
     setSaving(false);
   }
-
-  const importBook = books.find((b) => b.id === importBookId);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "slideshows", label: `Slideshows (${igSlideshows.length})` },

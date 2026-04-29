@@ -86,7 +86,7 @@ export default function PostsPage() {
         <AppHeader />
         <HowItWorks>
           <p><strong>Posts</strong> — view all your scheduled and published posts.</p>
-          <p>Filter by account to see what's been posted or what's coming up. Each entry shows the caption, slide count, and when it was scheduled or posted.</p>
+          <p>Filter by account to see what&apos;s been posted or what&apos;s coming up. Each entry shows the caption, slide count, and when it was scheduled or posted.</p>
         </HowItWorks>
 
         <div className="flex items-center justify-between mb-6">

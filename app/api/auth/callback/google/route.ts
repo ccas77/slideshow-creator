@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   ensureBootstrapAdmin,
   getUserByEmail,
-  createUser,
 } from "@/lib/auth";
 import { signSession, setSessionCookie } from "@/lib/session";
 

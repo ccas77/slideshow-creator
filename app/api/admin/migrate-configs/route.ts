@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     let migrated = 0;
-    let alreadyClean = 0;
+    const alreadyClean = 0;
     const details: Array<{ userId: string; accountId: number; username: string; status: string }> = [];
 
     for (const user of users) {

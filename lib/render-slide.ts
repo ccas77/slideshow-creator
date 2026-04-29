@@ -1,6 +1,5 @@
 import sharp from "sharp";
 import fs from "fs";
-import path from "path";
 import { INTER_BOLD_TTF_B64 } from "./font-data";
 
 const SLIDE_W = 1080;

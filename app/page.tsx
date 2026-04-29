@@ -276,7 +276,7 @@ export default function Home() {
     setBooks(next);
     try {
       // Strip coverImage from payload to avoid 413 errors.
-      const lightweight = next.map(({ coverImage, ...rest }) => rest);
+      const lightweight = next.map(({ coverImage: _coverImage, ...rest }) => rest);
       await fetch("/api/books", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -549,36 +549,6 @@ export default function Home() {
   );
 
   const slideCount = bulkText.split("\n").filter((t) => t.trim()).length;
-
-  function saveCurrentPrompt() {
-    if (!imagePrompt.trim()) return;
-    const name = window.prompt("Name this image prompt:");
-    if (!name?.trim()) return;
-    setSavedPrompts((prev) => [
-      ...prev.filter((p) => p.name !== name),
-      { name: name.trim(), value: imagePrompt },
-    ]);
-  }
-
-  function saveCurrentTexts() {
-    if (!bulkText.trim()) return;
-    const name = window.prompt("Name this slide text set:");
-    if (!name?.trim()) return;
-    setSavedTexts((prev) => [
-      ...prev.filter((p) => p.name !== name),
-      { name: name.trim(), value: bulkText },
-    ]);
-  }
-
-  function saveCurrentCaption() {
-    if (!caption.trim()) return;
-    const name = window.prompt("Name this caption:");
-    if (!name?.trim()) return;
-    setSavedCaptions((prev) => [
-      ...prev.filter((p) => p.name !== name),
-      { name: name.trim(), value: caption },
-    ]);
-  }
 
   async function generate() {
     const validTexts = bulkText.split("\n").filter((t) => t.trim());

@@ -5,7 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
@@ -31,6 +36,8 @@
   },
   "devDependencies": {
     "@types/fluent-ffmpeg": "^2.1.28",
-    "@types/node": "25.5.0"
+    "@types/node": "25.5.0",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35"
   }
 }

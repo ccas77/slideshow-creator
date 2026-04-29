@@ -5,7 +5,6 @@ import {
   Book,
   getBookCover,
   setBookCover,
-  deleteBookCover,
 } from "@/lib/kv";
 import { requireSession } from "@/lib/session";
 
@@ -41,7 +40,7 @@ export async function POST(req: NextRequest) {
     if (b.coverImage) {
       coverOps.push(setBookCover(session.userId, b.id, b.coverImage));
     }
-    const { coverImage, ...rest } = b;
+    const { coverImage: _coverImage, ...rest } = b;
     return rest;
   });
 
