@@ -96,64 +96,78 @@ async function generateTopNSlides(userId: string, listId: string, maxBooks?: num
 export async function publishTopN(
   opts: PublishTopNOptions
 ): Promise<PublishTopNResult> {
+  const startMs = Date.now();
+  let slideCount = 0;
   const { userId, listId, accountIds, scheduledAt } = opts;
-  const { list, slideBufs, finalOrder, audioBuffer } = await generateTopNSlides(userId, listId);
+  try {
+    const { list, slideBufs, finalOrder, audioBuffer } = await generateTopNSlides(userId, listId);
+    slideCount = slideBufs.length;
 
-  const isVideo = opts.platform === "tiktok-video" || opts.platform === "fb-video" || opts.platform === "ig-video";
+    const isVideo = opts.platform === "tiktok-video" || opts.platform === "fb-video" || opts.platform === "ig-video";
 
-  const mediaIds: string[] = [];
-  if (isVideo) {
-    const videoBuf = await renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2, audioBuffer });
-    const mediaId = await uploadVideo(videoBuf, "topn-video.mp4");
-    mediaIds.push(mediaId);
-  } else {
-    for (let j = 0; j < slideBufs.length; j++) {
-      const mediaId = await uploadPng(slideBufs[j], `topn-slide-${j}.png`);
+    const mediaIds: string[] = [];
+    if (isVideo) {
+      const videoBuf = await renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2, audioBuffer });
+      const mediaId = await uploadVideo(videoBuf, "topn-video.mp4");
       mediaIds.push(mediaId);
+    } else {
+      for (let j = 0; j < slideBufs.length; j++) {
+        const mediaId = await uploadPng(slideBufs[j], `topn-slide-${j}.png`);
+        mediaIds.push(mediaId);
+      }
     }
+
+    const captions = list.captions && list.captions.length > 0 ? list.captions : [""];
+    const caption = captions[Math.floor(Math.random() * captions.length)];
+
+    const platformConfigurations: Record<string, unknown> = {};
+    if (opts.platform === "tiktok-video" || opts.platform === "tiktok-carousel") {
+      platformConfigurations.tiktok = { draft: false, is_aigc: true };
+    } else if (opts.platform === "ig-carousel" || opts.platform === "ig-video") {
+      platformConfigurations.instagram = {};
+    } else if (opts.platform === "fb-video") {
+      platformConfigurations.facebook = {};
+    } else {
+      platformConfigurations.tiktok = { draft: false, is_aigc: true };
+      platformConfigurations.instagram = {};
+    }
+
+    const postBody: Record<string, unknown> = {
+      caption,
+      media: mediaIds,
+      social_accounts: accountIds,
+      platform_configurations: platformConfigurations,
+    };
+    if (scheduledAt) postBody.scheduled_at = scheduledAt;
+
+    const postResp = await pbFetch("/v1/posts", {
+      method: "POST",
+      body: JSON.stringify(postBody),
+    });
+
+    return {
+      postId: postResp.id || postResp.data?.id || "unknown",
+      slides: slideBufs.length,
+      books: finalOrder.map((b) => b.title),
+    };
+  } finally {
+    console.log(`[topn-publisher] publishTopN done listId=${listId} slides=${slideCount} elapsedMs=${Date.now() - startMs}`);
   }
-
-  const captions = list.captions && list.captions.length > 0 ? list.captions : [""];
-  const caption = captions[Math.floor(Math.random() * captions.length)];
-
-  const platformConfigurations: Record<string, unknown> = {};
-  if (opts.platform === "tiktok-video" || opts.platform === "tiktok-carousel") {
-    platformConfigurations.tiktok = { draft: false, is_aigc: true };
-  } else if (opts.platform === "ig-carousel" || opts.platform === "ig-video") {
-    platformConfigurations.instagram = {};
-  } else if (opts.platform === "fb-video") {
-    platformConfigurations.facebook = {};
-  } else {
-    platformConfigurations.tiktok = { draft: false, is_aigc: true };
-    platformConfigurations.instagram = {};
-  }
-
-  const postBody: Record<string, unknown> = {
-    caption,
-    media: mediaIds,
-    social_accounts: accountIds,
-    platform_configurations: platformConfigurations,
-  };
-  if (scheduledAt) postBody.scheduled_at = scheduledAt;
-
-  const postResp = await pbFetch("/v1/posts", {
-    method: "POST",
-    body: JSON.stringify(postBody),
-  });
-
-  return {
-    postId: postResp.id || postResp.data?.id || "unknown",
-    slides: slideBufs.length,
-    books: finalOrder.map((b) => b.title),
-  };
 }
 
 /**
  * Generate a preview video for a list (no upload, no posting).
  */
 export async function previewTopN(userId: string, listId: string): Promise<Buffer> {
-  const { slideBufs, audioBuffer } = await generateTopNSlides(userId, listId);
-  return renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2, audioBuffer });
+  const startMs = Date.now();
+  let slideCount = 0;
+  try {
+    const { slideBufs, audioBuffer } = await generateTopNSlides(userId, listId);
+    slideCount = slideBufs.length;
+    return renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2, audioBuffer });
+  } finally {
+    console.log(`[topn-publisher] previewTopN done listId=${listId} slides=${slideCount} elapsedMs=${Date.now() - startMs}`);
+  }
 }
 
 export type { TopNList };
