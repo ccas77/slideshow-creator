@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/session";
 
+export const maxDuration = 300;
+
 const GUIDE = `You are a slideshow creator for book promos on TikTok/Instagram. You convert book passages into slideshow beats following these rules strictly.
 
 CRITICAL PROCESS:
