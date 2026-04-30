@@ -1,10 +1,13 @@
 import sharp from "sharp";
 import fs from "fs";
+import path from "path";
 import { INTER_BOLD_TTF_B64 } from "./font-data";
 
 const W = 1080;
 const H = 1920;
 const TMP_FONT = "/tmp/Inter-Bold.ttf";
+const TMP_EMOJI = "/tmp/NotoColorEmoji.ttf";
+const TMP_FC_CONF = "/tmp/fonts.conf";
 
 // TikTok safe zones (UI chrome overlays these areas):
 // - Top ~14% holds username, close button, for-you tab
@@ -13,11 +16,28 @@ const SAFE_TOP = 280;
 const SAFE_BOTTOM = 480;
 const SAFE_H = H - SAFE_TOP - SAFE_BOTTOM; // ≈ 1160
 
-function ensureFont(): string {
+function ensureFonts(): void {
   if (!fs.existsSync(TMP_FONT)) {
     fs.writeFileSync(TMP_FONT, Buffer.from(INTER_BOLD_TTF_B64, "base64"));
   }
-  return TMP_FONT;
+  if (!fs.existsSync(TMP_EMOJI)) {
+    const bundled = path.join(process.cwd(), "lib/fonts/NotoColorEmoji.ttf");
+    if (fs.existsSync(bundled)) {
+      fs.copyFileSync(bundled, TMP_EMOJI);
+    }
+  }
+  if (!fs.existsSync(TMP_FC_CONF)) {
+    fs.writeFileSync(
+      TMP_FC_CONF,
+      `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>/tmp</dir>
+  <cachedir>/tmp/fc-cache</cachedir>
+</fontconfig>`
+    );
+  }
+  process.env.FONTCONFIG_FILE = TMP_FC_CONF;
 }
 
 function escapeMarkup(s: string): string {
@@ -52,18 +72,16 @@ function gradientSvg(): string {
 }
 
 async function renderText(
-  fontFile: string,
   text: string,
   color: string,
   fontSize: number,
   maxWidth?: number
 ): Promise<Buffer> {
   const pSize = fontSize * 1024;
-  const markup = `<span foreground="${color}" font_weight="bold" font_size="${pSize}">${escapeMarkup(text)}</span>`;
+  const markup = `<span font_family="Inter" foreground="${color}" font_weight="bold" font_size="${pSize}">${escapeMarkup(text)}</span>`;
   return sharp({
     text: {
       text: markup,
-      fontfile: fontFile,
       width: maxWidth ?? (W - 80),
       align: "centre",
       rgba: true,
@@ -81,14 +99,13 @@ async function renderText(
  */
 async function compositeTextWithStroke(
   base: Buffer,
-  fontFile: string,
   text: string,
   fontSize: number,
   topOffset: number,
   maxWidth?: number
 ): Promise<Buffer> {
-  const strokePng = await renderText(fontFile, text, "black", fontSize, maxWidth);
-  const textPng = await renderText(fontFile, text, "white", fontSize, maxWidth);
+  const strokePng = await renderText(text, "black", fontSize, maxWidth);
+  const textPng = await renderText(text, "white", fontSize, maxWidth);
 
   const meta = await sharp(textPng).metadata();
   const textW = meta.width || (W - 80);
@@ -138,7 +155,7 @@ export async function renderTitleSlide(
   text: string,
   bgImage: string | null = null
 ): Promise<Buffer> {
-  const fontFile = ensureFont();
+  ensureFonts();
   const base = await makeBase(bgImage);
   const gradientPng = await sharp(Buffer.from(gradientSvg()))
     .resize(W, H)
@@ -150,14 +167,14 @@ export async function renderTitleSlide(
     .toBuffer();
 
   const titleFontSize = 42;
-  const textPng = await renderText(fontFile, text, "white", titleFontSize);
+  const textPng = await renderText(text, "white", titleFontSize);
   const textMeta = await sharp(textPng).metadata();
   const textH = textMeta.height || 0;
   // Center within safe zone (not the full canvas) so text isn't buried under
   // TikTok's top/bottom UI chrome.
   const topOffset = SAFE_TOP + Math.max(0, Math.round((SAFE_H - textH) / 2));
 
-  return compositeTextWithStroke(withGradient, fontFile, text, titleFontSize, topOffset, 550);
+  return compositeTextWithStroke(withGradient, text, titleFontSize, topOffset, 550);
 }
 
 /** Book slide: title + author at top of safe zone, cover below, content
@@ -168,17 +185,17 @@ export async function renderBookSlide(
   author: string,
   bgImage: string | null = null
 ): Promise<Buffer> {
-  const fontFile = ensureFont();
+  ensureFonts();
   const base = await makeBase(bgImage);
 
   // Measure title and author heights
-  const titlePng = await renderText(fontFile, title, "white", 28);
+  const titlePng = await renderText(title, "white", 28);
   const titleMeta = await sharp(titlePng).metadata();
   const titleH = titleMeta.height || 0;
 
   let authorH = 0;
   if (author) {
-    const authorPng = await renderText(fontFile, author, "white", 22);
+    const authorPng = await renderText(author, "white", 22);
     const authorMeta = await sharp(authorPng).metadata();
     authorH = authorMeta.height || 0;
   }
@@ -219,11 +236,10 @@ export async function renderBookSlide(
     .png()
     .toBuffer();
 
-  result = await compositeTextWithStroke(result, fontFile, title, 28, textTop);
+  result = await compositeTextWithStroke(result, title, 28, textTop);
   if (author) {
     result = await compositeTextWithStroke(
       result,
-      fontFile,
       author,
       22,
       textTop + titleH + gap
