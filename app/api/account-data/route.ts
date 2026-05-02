@@ -28,6 +28,15 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  // Preserve cron-managed pointer/promptPointer if not included in the incoming config.
+  // The UI strips these fields to avoid overwriting cron values, so we merge them back.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = data.config as any;
+  if (raw && !("pointer" in raw)) {
+    const existing = await getAccountData(session.userId, accountId);
+    raw.pointer = existing.config.pointer;
+    raw.promptPointer = existing.config.promptPointer;
+  }
   await setAccountData(session.userId, accountId, data);
   return NextResponse.json({ ok: true });
 }
