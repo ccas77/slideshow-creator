@@ -120,7 +120,7 @@ export default function TopBooksPage() {
       const [bRes, lRes, aRes, igRes, fbRes, autoRes, musicRes] = await Promise.all([
         fetch(`/api/top-books`),
         fetch(`/api/top-n-lists`),
-        fetch(`/api/post-tiktok`),
+        fetch(`/api/post-tiktok?platform=tiktok`),
         fetch(`/api/post-tiktok?platform=instagram`),
         fetch(`/api/post-tiktok?platform=facebook`),
         fetch(`/api/topn-automation`),

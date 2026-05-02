@@ -109,7 +109,7 @@ export default function InstagramPage() {
       const [igRes, booksRes, ttRes, igAccRes, autoRes] = await Promise.all([
         fetch("/api/ig-slideshows"),
         fetch("/api/books"),
-        fetch("/api/post-tiktok"),
+        fetch("/api/post-tiktok?platform=tiktok"),
         fetch("/api/post-tiktok?platform=instagram"),
         fetch("/api/ig-automation"),
       ]);
