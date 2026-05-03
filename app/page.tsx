@@ -542,6 +542,7 @@ export default function Home() {
             captions: savedCaptions,
             lastRun,
             lastStatus,
+            recentPosts,
           },
         }),
       }).then(async (res) => {
@@ -566,6 +567,7 @@ export default function Home() {
     loadingAccount,
     lastRun,
     lastStatus,
+    recentPosts,
   ]);
 
   const selectedAccount = useMemo(
@@ -877,9 +879,10 @@ export default function Home() {
                                   <div key={i} className="text-xs bg-white rounded-lg border border-gray-200 px-3 py-2">
                                     <div className="flex justify-between">
                                       <span className="font-medium text-gray-800">{p.bookName} / {p.slideshowName}</span>
-                                      <span className="text-gray-400">{new Date(p.scheduledAt).toLocaleString()}</span>
+                                      <span className="text-gray-400 shrink-0 ml-2">{new Date(p.scheduledAt).toLocaleString()}</span>
                                     </div>
-                                    <div className="text-gray-400 mt-0.5 truncate">Prompt: {p.promptSnippet}…</div>
+                                    <div className="text-blue-600 mt-1 font-medium">Image prompt: {p.promptSnippet}…</div>
+                                    <div className="text-gray-400 mt-0.5">Post ID: {p.postId}</div>
                                   </div>
                                 ))}
                               </div>
