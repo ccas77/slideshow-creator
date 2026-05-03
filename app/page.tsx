@@ -400,6 +400,14 @@ export default function Home() {
         : b
     );
     await saveBooks(next);
+    // Auto-select the new slideshow for export so cron picks it up
+    setConfig((prev) => ({
+      ...prev,
+      selections: [
+        ...(prev.selections || []),
+        { bookId: targetBookId, slideshowId: newSlideshow.id },
+      ],
+    }));
     window.alert(`Saved "${newSlideshow.name}" to book.`);
   }
 
