@@ -62,6 +62,15 @@ interface Book {
   slideshows: Slideshow[];
 }
 
+interface ScheduledPost {
+  slideshowName: string;
+  bookName: string;
+  promptSnippet: string;
+  scheduledAt: string;
+  postId: string;
+  timestamp: string;
+}
+
 interface AccountData {
   config: AutomationConfig;
   prompts: SavedItem[];
@@ -69,6 +78,7 @@ interface AccountData {
   captions: SavedItem[];
   lastRun?: string;
   lastStatus?: string;
+  recentPosts?: ScheduledPost[];
 }
 
 const LS = {
@@ -254,6 +264,7 @@ export default function Home() {
   const [config, setConfig] = useState<AutomationConfig>(DEFAULT_CONFIG);
   const [lastRun, setLastRun] = useState<string | undefined>();
   const [lastStatus, setLastStatus] = useState<string | undefined>();
+  const [recentPosts, setRecentPosts] = useState<ScheduledPost[]>([]);
   const [loadingAccount, setLoadingAccount] = useState(false);
   // Books (global)
   const [books, setBooks] = useState<Book[]>([]);
@@ -470,6 +481,7 @@ export default function Home() {
         setConfig(data.config || DEFAULT_CONFIG);
         setLastRun(data.lastRun);
         setLastStatus(data.lastStatus);
+        setRecentPosts(data.recentPosts || []);
         // Initialize expanded books from existing selections
         const existingSels = data.config?.selections || [];
         setExpandedBooks([...new Set(existingSels.map((s: { bookId: string }) => s.bookId))]);
@@ -848,6 +860,22 @@ export default function Home() {
                               Last run: {new Date(lastRun).toLocaleString()} —{" "}
                               {lastStatus}
                             </p>
+                          )}
+                          {recentPosts.length > 0 && (
+                            <div className="mt-4">
+                              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Recent Scheduled Posts</div>
+                              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                {recentPosts.map((p, i) => (
+                                  <div key={i} className="text-xs bg-white rounded-lg border border-gray-200 px-3 py-2">
+                                    <div className="flex justify-between">
+                                      <span className="font-medium text-gray-800">{p.bookName} / {p.slideshowName}</span>
+                                      <span className="text-gray-400">{new Date(p.scheduledAt).toLocaleString()}</span>
+                                    </div>
+                                    <div className="text-gray-400 mt-0.5 truncate">Prompt: {p.promptSnippet}…</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           )}
                         </>
                       )}

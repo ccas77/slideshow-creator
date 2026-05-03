@@ -190,6 +190,15 @@ export function migrateBook(raw: unknown): Book {
   return { id: b.id, name: b.name, coverImage: b.coverImage, imagePrompts, captions, slideshows };
 }
 
+export interface ScheduledPost {
+  slideshowName: string;
+  bookName: string;
+  promptSnippet: string;
+  scheduledAt: string;
+  postId: string;
+  timestamp: string;
+}
+
 export interface AccountData {
   config: AutomationConfig;
   prompts: SavedItem[];
@@ -197,6 +206,7 @@ export interface AccountData {
   captions: SavedItem[];
   lastRun?: string;
   lastStatus?: string;
+  recentPosts?: ScheduledPost[];
 }
 
 const defaultData = (): AccountData => ({

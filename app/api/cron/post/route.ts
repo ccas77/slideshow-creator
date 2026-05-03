@@ -97,6 +97,8 @@ interface Job {
   source: string;
   coverImage?: string;
   schedKey: string; // for duplicate tracking
+  slideshowName: string;
+  bookName: string;
 }
 
 export async function GET(req: NextRequest) {
@@ -247,6 +249,8 @@ export async function GET(req: NextRequest) {
             let captionText = "";
             let source = "";
             let coverImage: string | undefined;
+            let slideshowName = "";
+            let bookName = "";
 
             const candidates: Array<{
               book: (typeof books)[0];
@@ -315,6 +319,8 @@ export async function GET(req: NextRequest) {
               }
               captionText = pickedCaption?.value || "";
               coverImage = book.coverImage;
+              bookName = book.name;
+              slideshowName = pickedSlideshow.name;
               source = `book:${book.name}/${pickedSlideshow.name}`;
               debugLog.push(`  Picked [${pickedIdx}/${candidates.length}]: ${source}, ${slideTexts.length} slides, prompt="${imagePrompt.slice(0,40)}..."`);
             } else {
@@ -346,6 +352,8 @@ export async function GET(req: NextRequest) {
               source,
               coverImage,
               schedKey,
+              slideshowName,
+              bookName,
             });
           }
       } catch (err) {
@@ -395,7 +403,7 @@ export async function GET(req: NextRequest) {
     );
 
     // Phase 3: render + upload + post strictly sequentially (sharp Pango)
-    const postResults: Array<{ job: Job; status: string }> = [];
+    const postResults: Array<{ job: Job; status: string; scheduledAt?: string; postId?: string }> = [];
 
     for (let i = 0; i < jobs.length; i++) {
       const job = jobs[i];
@@ -444,6 +452,8 @@ export async function GET(req: NextRequest) {
         postResults.push({
           job,
           status: `scheduled ${job.slideTexts.length} slides for ${scheduledAt.toISOString()} (${job.source}) [post:${postId}]`,
+          scheduledAt: scheduledAt.toISOString(),
+          postId: String(postId),
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -451,12 +461,24 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Phase 4: aggregate results per (user, account) and save status
+    // Phase 4: aggregate results per (user, account) and save status + history
     const keyStatuses = new Map<string, string[]>();
+    const keyNewPosts = new Map<string, Array<{ slideshowName: string; bookName: string; promptSnippet: string; scheduledAt: string; postId: string; timestamp: string }>>();
     for (const r of postResults) {
       const k = `${r.job.userId}:${r.job.acc.id}`;
       if (!keyStatuses.has(k)) keyStatuses.set(k, []);
       keyStatuses.get(k)!.push(r.status);
+      if (r.scheduledAt && r.postId) {
+        if (!keyNewPosts.has(k)) keyNewPosts.set(k, []);
+        keyNewPosts.get(k)!.push({
+          slideshowName: r.job.slideshowName || "unknown",
+          bookName: r.job.bookName || "unknown",
+          promptSnippet: r.job.imagePrompt.slice(0, 60),
+          scheduledAt: r.scheduledAt,
+          postId: r.postId,
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
 
     for (const [k, statuses] of keyStatuses) {
@@ -477,6 +499,8 @@ export async function GET(req: NextRequest) {
         if (data) {
           const newPointer = pointerUpdates.get(k);
           const newPromptPointer = promptPointerUpdates.get(k);
+          const existingHistory = data.recentPosts || [];
+          const newHistory = [...(keyNewPosts.get(k) || []), ...existingHistory].slice(0, 20);
           await setAccountData(userId, accId, {
             ...data,
             config: {
@@ -486,6 +510,7 @@ export async function GET(req: NextRequest) {
             },
             lastRun: new Date().toISOString(),
             lastStatus: status,
+            recentPosts: newHistory,
           });
         }
       } catch {}
