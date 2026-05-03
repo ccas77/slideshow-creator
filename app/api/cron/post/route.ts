@@ -513,7 +513,10 @@ export async function GET(req: NextRequest) {
             recentPosts: newHistory,
           });
         }
-      } catch {}
+      } catch (saveErr) {
+        const msg = saveErr instanceof Error ? saveErr.message : String(saveErr);
+        debugLog.push(`Save error for ${k}: ${msg}`);
+      }
     }
 
     // Phase 5: Top N list automation — per-account round-robin (sequential — sharp Pango)
