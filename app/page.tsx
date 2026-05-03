@@ -290,12 +290,20 @@ export default function Home() {
     try {
       // Strip coverImage from payload to avoid 413 errors.
       const lightweight = next.map(({ coverImage: _coverImage, ...rest }) => rest);
-      await fetch("/api/books", {
+      const res = await fetch("/api/books", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ books: lightweight }),
       });
-    } catch {}
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("Books save failed:", res.status, text);
+        window.alert(`Save failed: ${res.status} — ${text.slice(0, 200)}`);
+      }
+    } catch (e) {
+      console.error("Books save error:", e);
+      window.alert("Save failed — check console for details.");
+    }
   }
 
   function loadSlideshowIntoEditor(s: Slideshow, book?: Book) {
