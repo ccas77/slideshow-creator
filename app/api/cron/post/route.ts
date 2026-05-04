@@ -689,12 +689,6 @@ export async function GET(req: NextRequest) {
           const schedKeys = activeWindows.map((w) => `topn:${user.id}:${accIdStr}:${w.start}`);
 
           topNJobs.push({ user, accIdStr, accConfig, selectedList, activeWindows, schedKeys });
-
-          updatedTopNAccounts[accIdStr] = {
-            ...accConfig,
-            pointer: accConfig.pointer + 1,
-            lastPostDate: today,
-          };
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -710,6 +704,7 @@ export async function GET(req: NextRequest) {
 
     // Now do heavy work
     const failedTopNKeys: string[] = [];
+    const topnSuccessAccounts = new Set<string>(); // userId:accIdStr
     for (const topNJob of topNJobs) {
       for (const win of topNJob.activeWindows) {
         try {
@@ -727,6 +722,7 @@ export async function GET(req: NextRequest) {
             listName: topNJob.selectedList.name,
             status: `${topNJob.accIdStr}: scheduled ${r.slides} slides for ${scheduledAt.toISOString()} [post:${r.postId}]`,
           });
+          topnSuccessAccounts.add(`${topNJob.user.id}:${topNJob.accIdStr}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           topNResults.push({
@@ -740,6 +736,21 @@ export async function GET(req: NextRequest) {
     }
     if (failedTopNKeys.length > 0) {
       await unmarkScheduled(failedTopNKeys);
+    }
+
+    // Only advance pointer and lastPostDate for accounts with at least one success
+    for (const topNJob of topNJobs) {
+      const key = `${topNJob.user.id}:${topNJob.accIdStr}`;
+      if (topnSuccessAccounts.has(key)) {
+        const userId = topNJob.user.id;
+        if (!topNAutoByUser.has(userId)) continue;
+        const { updated } = topNAutoByUser.get(userId)!;
+        updated[topNJob.accIdStr] = {
+          ...topNJob.accConfig,
+          pointer: topNJob.accConfig.pointer + 1,
+          lastPostDate: today,
+        };
+      }
     }
 
     // Save updated pointers
