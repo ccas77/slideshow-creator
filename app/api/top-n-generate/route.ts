@@ -10,10 +10,11 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { listId, accountIds, scheduledAt } = body as {
+  const { listId, accountIds, scheduledAt, backgroundPrompts } = body as {
     listId: string;
     accountIds: number[];
     scheduledAt?: string;
+    backgroundPrompts?: string[];
   };
 
   if (!listId || !accountIds?.length) {
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
       listId,
       accountIds,
       scheduledAt,
+      backgroundPrompts,
     });
     return NextResponse.json({
       ok: true,
