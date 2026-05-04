@@ -443,12 +443,15 @@ export default function TopBooksPage() {
 
   // ── Video Preview ──
 
-  async function generateVideoPreview(listId: string) {
+  async function generateVideoPreview(listId: string, accountId?: string) {
     setGeneratingVideoForList(listId);
     if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
     setVideoPreviewUrl(null);
     try {
-      const res = await fetch(`/api/top-n-preview?listId=${listId}`, {
+      const accKey = accountId || selectedTopnAccount;
+      const accBgPrompts = accKey ? topnAutoConfig.accounts[accKey]?.backgroundPrompts : undefined;
+      const bgParam = accBgPrompts && accBgPrompts.length > 0 ? `&backgroundPrompts=${encodeURIComponent(accBgPrompts.join("|"))}` : "";
+      const res = await fetch(`/api/top-n-preview?listId=${listId}${bgParam}`, {
         signal: AbortSignal.timeout(300000),
       });
       const contentType = res.headers.get("content-type") || "";

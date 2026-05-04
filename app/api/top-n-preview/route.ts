@@ -13,9 +13,11 @@ export async function GET(req: NextRequest) {
   if (!listId) {
     return NextResponse.json({ error: "listId required" }, { status: 400 });
   }
+  const bgPromptsParam = url.searchParams.get("backgroundPrompts");
+  const bgPromptsOverride = bgPromptsParam ? bgPromptsParam.split("|").filter(Boolean) : undefined;
 
   try {
-    const videoBuf = await previewTopN(session.userId, listId);
+    const videoBuf = await previewTopN(session.userId, listId, bgPromptsOverride);
     return new Response(new Uint8Array(videoBuf), {
       headers: {
         "Content-Type": "video/mp4",

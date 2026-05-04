@@ -161,11 +161,11 @@ export async function publishTopN(
 /**
  * Generate a preview video for a list (no upload, no posting).
  */
-export async function previewTopN(userId: string, listId: string): Promise<Buffer> {
+export async function previewTopN(userId: string, listId: string, bgPromptsOverride?: string[]): Promise<Buffer> {
   const startMs = Date.now();
   let slideCount = 0;
   try {
-    const { slideBufs, audioBuffer } = await generateTopNSlides(userId, listId);
+    const { slideBufs, audioBuffer } = await generateTopNSlides(userId, listId, undefined, bgPromptsOverride);
     slideCount = slideBufs.length;
     return renderVideo(slideBufs, { durationPerSlide: 4, transitionDuration: 2, audioBuffer });
   } finally {
