@@ -51,9 +51,9 @@ export async function POST(req: NextRequest) {
       lastRun: existing.lastRun,
       lastStatus: existing.lastStatus,
     };
-    await setAccountData(session.userId, accountId, merged);
+    await setAccountData(session.userId, accountId, merged, "ui-save");
   } else {
-    await setAccountData(session.userId, accountId, data);
+    await setAccountData(session.userId, accountId, data, "full-save");
   }
   return NextResponse.json({ ok: true });
 }
