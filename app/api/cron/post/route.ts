@@ -14,7 +14,7 @@ import {
   redis,
 } from "@/lib/kv";
 import { listUsers } from "@/lib/auth";
-import { generateImage } from "@/lib/gemini";
+import { generateImageWithInfo } from "@/lib/gemini";
 import { renderSlide } from "@/lib/render-slide";
 import { listTikTokAccounts, pbFetch, uploadPng } from "@/lib/post-bridge";
 import { publishTopN } from "@/lib/topn-publisher";
@@ -58,6 +58,19 @@ async function markScheduled(entries: string[]): Promise<void> {
   const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 1, 0, 0));
   const ttl = Math.ceil((midnight.getTime() - now.getTime()) / 1000);
   await redis.set(key, merged, { ex: ttl });
+}
+
+async function unmarkScheduled(entries: string[]): Promise<void> {
+  if (entries.length === 0) return;
+  const key = scheduledTodayKey();
+  const existing = await redis.get<string[]>(key);
+  if (!existing) return;
+  const removeSet = new Set(entries);
+  const filtered = existing.filter((e) => !removeSet.has(e));
+  const now = new Date();
+  const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 1, 0, 0));
+  const ttl = Math.ceil((midnight.getTime() - now.getTime()) / 1000);
+  await redis.set(key, filtered, { ex: ttl });
 }
 
 function randomTimeInWindow(windowStart: string, windowEnd: string): Date {
@@ -391,46 +404,33 @@ export async function GET(req: NextRequest) {
       await markScheduled(allSchedKeys);
     }
 
-    // Phase 2: generate all images in parallel
-    const images = await Promise.all(
-      jobs.map(async (job) => {
-        try {
-          return await generateImage(job.imagePrompt);
-        } catch {
-          return null;
-        }
-      })
-    );
-
-    // Phase 3: render + upload + post strictly sequentially (sharp Pango)
+    // Phase 2+3: Generate image, render slides, and post — one job at a time
     const postResults: Array<{ job: Job; status: string; scheduledAt?: string; postId?: string }> = [];
 
-    for (let i = 0; i < jobs.length; i++) {
-      const job = jobs[i];
-      const image = images[i];
-      if (!image) {
-        postResults.push({ job, status: "skipped: image generation failed" });
-        continue;
-      }
+    for (const job of jobs) {
       try {
+        const imgResult = await generateImageWithInfo(job.imagePrompt);
+        if (!imgResult.data) {
+          debugLog.push(`${job.acc.username} (${job.acc.id}) ${job.win.start}: image gen failed — ${imgResult.error || "unknown"}`);
+          postResults.push({ job, status: `skipped: image generation failed — ${imgResult.error || "unknown"}` });
+          continue;
+        }
+
         const slideBufs: Buffer[] = [];
         for (const text of job.slideTexts) {
-          const buf = await renderSlide(image, text);
-          slideBufs.push(buf);
+          slideBufs.push(await renderSlide(imgResult.data, text));
         }
 
         const mediaIds: string[] = [];
         for (let j = 0; j < slideBufs.length; j++) {
-          const mediaId = await uploadPng(slideBufs[j], `slide-${j + 1}.png`);
-          mediaIds.push(mediaId);
+          mediaIds.push(await uploadPng(slideBufs[j], `slide-${j + 1}.png`));
         }
 
         // Upload book cover as final slide if available
         if (job.coverImage) {
           const base64 = job.coverImage.replace(/^data:[^;]+;base64,/, "");
           const coverBuf = Buffer.from(base64, "base64");
-          const coverMediaId = await uploadPng(coverBuf, `slide-${slideBufs.length + 1}-cover.png`);
-          mediaIds.push(coverMediaId);
+          mediaIds.push(await uploadPng(coverBuf, `slide-${slideBufs.length + 1}-cover.png`));
         }
 
         const scheduledAt = randomTimeInWindow(job.win.start, job.win.end);
@@ -457,8 +457,18 @@ export async function GET(req: NextRequest) {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        debugLog.push(`${job.acc.username} (${job.acc.id}) ${job.win.start}: job error — ${msg}`);
         postResults.push({ job, status: `error: ${msg}` });
       }
+    }
+
+    // Un-mark schedule keys for failed jobs so they can retry next invocation
+    const failedSchedKeys = postResults
+      .filter((r) => r.status.startsWith("skipped:") || r.status.startsWith("error:"))
+      .map((r) => r.job.schedKey);
+    if (failedSchedKeys.length > 0) {
+      debugLog.push(`Un-marking ${failedSchedKeys.length} failed schedule keys: ${JSON.stringify(failedSchedKeys)}`);
+      await unmarkScheduled(failedSchedKeys);
     }
 
     // Phase 4: aggregate results per (user, account) and save status + history
@@ -516,6 +526,108 @@ export async function GET(req: NextRequest) {
       } catch (saveErr) {
         const msg = saveErr instanceof Error ? saveErr.message : String(saveErr);
         debugLog.push(`Save error for ${k}: ${msg}`);
+      }
+    }
+
+    // Fallback: if ALL windows passed and no successful post, try once more now
+    const currentScheduled = await getScheduledToday();
+    const successfulAccounts = new Set(
+      postResults
+        .filter((r) => !r.status.startsWith("skipped:") && !r.status.startsWith("error:"))
+        .map((r) => `${r.job.userId}:${r.job.acc.id}`)
+    );
+
+    for (const acc of allAccounts) {
+      const owner = accountOwner.get(acc.id);
+      if (!owner) continue;
+      const { user, data, books } = owner;
+      if (!data.config.enabled || data.config.intervals.length === 0) continue;
+      const ownerKey = `${user.id}:${acc.id}`;
+      if (successfulAccounts.has(ownerKey)) continue;
+      const anyWindowLeft = data.config.intervals.some((w) => shouldProcessWindow(w.start, forceHour));
+      if (anyWindowLeft) continue;
+      const hasSuccessKey = data.config.intervals.some((w) =>
+        currentScheduled.has(`${user.id}:${acc.id}:${w.start}`)
+      );
+      if (hasSuccessKey) continue;
+
+      debugLog.push(`${acc.username} (${acc.id}) [u:${user.id}]: fallback — all windows passed with no successful post`);
+      const candidates: Array<{ book: (typeof books)[0]; slideshow: (typeof books)[0]["slideshows"][0] }> = [];
+      for (const sel of data.config.selections) {
+        const book = books.find((b) => b.id === sel.bookId);
+        const slideshow = book?.slideshows.find((s) => s.id === sel.slideshowId);
+        if (book && slideshow) candidates.push({ book, slideshow });
+      }
+      if (candidates.length === 0) continue;
+
+      const ptr = pointerUpdates.get(ownerKey) ?? (data.config.pointer || 0);
+      const picked = candidates[ptr % candidates.length];
+      if (!picked || !picked.slideshow.slideTexts.trim()) continue;
+
+      const { book, slideshow: pickedSlideshow } = picked;
+      const linkedPrompts = (book.imagePrompts || []).filter((p) => pickedSlideshow.imagePromptIds.includes(p.id));
+      const allowedPrompts = linkedPrompts.length > 0 ? linkedPrompts : book.imagePrompts || [];
+      const pPtr = promptPointerUpdates.get(ownerKey) ?? (data.config.promptPointer || 0);
+      const pickedPrompt = allowedPrompts.length > 0 ? allowedPrompts[pPtr % allowedPrompts.length] : null;
+      if (!pickedPrompt) continue;
+
+      const slideTexts = pickedSlideshow.slideTexts.split("\n").map((t) => t.trim()).filter(Boolean);
+      if (slideTexts.length < 2) continue;
+      const finalTexts = book.coverImage && slideTexts.length > 2 ? slideTexts.slice(0, -1) : slideTexts;
+
+      const linkedCaptions = (book.captions || []).filter((c) => pickedSlideshow.captionIds.includes(c.id));
+      const allowedCaptions = linkedCaptions.length > 0 ? linkedCaptions : book.captions || [];
+      const captionText = pickRandom(allowedCaptions)?.value || "";
+
+      try {
+        const imgResult = await generateImageWithInfo(pickedPrompt.value);
+        if (!imgResult.data) {
+          debugLog.push(`${acc.username} (${acc.id}) fallback: image gen failed — ${imgResult.error || "unknown"}`);
+          results.push({ userId: user.id, accountId: acc.id, username: acc.username, status: `fallback failed: ${imgResult.error || "image gen failed"}` });
+          continue;
+        }
+
+        const slideBufs: Buffer[] = [];
+        for (const text of finalTexts) {
+          slideBufs.push(await renderSlide(imgResult.data, text));
+        }
+        const mediaIds: string[] = [];
+        for (let j = 0; j < slideBufs.length; j++) {
+          mediaIds.push(await uploadPng(slideBufs[j], `slide-${j + 1}.png`));
+        }
+        if (book.coverImage) {
+          const b64 = book.coverImage.replace(/^data:[^;]+;base64,/, "");
+          mediaIds.push(await uploadPng(Buffer.from(b64, "base64"), `slide-cover.png`));
+        }
+
+        const scheduledAt = new Date(Date.now() + 5 * 60 * 1000);
+        const postResp = await pbFetch("/v1/posts", {
+          method: "POST",
+          body: JSON.stringify({
+            caption: captionText,
+            media: mediaIds,
+            social_accounts: [acc.id],
+            scheduled_at: scheduledAt.toISOString(),
+            platform_configurations: { tiktok: { draft: false, is_aigc: true } },
+          }),
+        });
+        const postId = postResp.id || postResp.data?.id || "unknown";
+        const status = `fallback: scheduled ${finalTexts.length} slides for ${scheduledAt.toISOString()} (book:${book.name}/${pickedSlideshow.name}) [post:${postId}]`;
+        results.push({ userId: user.id, accountId: acc.id, username: acc.username, status });
+
+        await markScheduled([`${user.id}:${acc.id}:fallback`]);
+        const newPointer = ptr + 1;
+        const newPromptPointer = pPtr + 1;
+        await setAccountData(user.id, acc.id, {
+          ...data,
+          config: { ...data.config, pointer: newPointer, promptPointer: newPromptPointer },
+          lastRun: new Date().toISOString(),
+          lastStatus: status,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        debugLog.push(`${acc.username} (${acc.id}) fallback error: ${msg}`);
+        results.push({ userId: user.id, accountId: acc.id, username: acc.username, status: `fallback error: ${msg}` });
       }
     }
 
@@ -597,6 +709,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Now do heavy work
+    const failedTopNKeys: string[] = [];
     for (const topNJob of topNJobs) {
       for (const win of topNJob.activeWindows) {
         try {
@@ -620,8 +733,12 @@ export async function GET(req: NextRequest) {
             listName: topNJob.selectedList.name,
             status: `error (${topNJob.accIdStr}): ${msg}`,
           });
+          failedTopNKeys.push(`topn:${topNJob.user.id}:${topNJob.accIdStr}:${win.start}`);
         }
       }
+    }
+    if (failedTopNKeys.length > 0) {
+      await unmarkScheduled(failedTopNKeys);
     }
 
     // Save updated pointers
@@ -708,11 +825,12 @@ export async function GET(req: NextRequest) {
             if (texts.length < 2) continue;
 
             try {
-              const image = await generateImage(prompt.value);
-              if (!image) {
-                igAutoResults.push({ userId: user.id, status: `skip: image gen failed for ${ss.name} (${accIdStr})` });
+              const imgResult = await generateImageWithInfo(prompt.value);
+              if (!imgResult.data) {
+                igAutoResults.push({ userId: user.id, status: `skip: image gen failed for ${ss.name} (${accIdStr}) — ${imgResult.error || "unknown"}` });
                 continue;
               }
+              const image = imgResult.data;
               const slideBufs: Buffer[] = [];
 
               for (const text of texts) {
