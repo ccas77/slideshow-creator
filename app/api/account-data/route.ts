@@ -28,15 +28,32 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  // Preserve cron-managed pointer/promptPointer if not included in the incoming config.
-  // The UI strips these fields to avoid overwriting cron values, so we merge them back.
+  // The UI strips pointer/promptPointer from config saves.
+  // To avoid a race condition where the UI overwrites cron-managed fields
+  // (pointer, promptPointer, lastRun, lastStatus), we read the existing data
+  // and only overlay the UI-managed fields onto it.
+  const existing = await getAccountData(session.userId, accountId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw = data.config as any;
-  if (raw && !("pointer" in raw)) {
-    const existing = await getAccountData(session.userId, accountId);
-    raw.pointer = existing.config.pointer;
-    raw.promptPointer = existing.config.promptPointer;
+  const incomingConfig = data.config as any;
+  const isUiSave = incomingConfig && !("pointer" in incomingConfig);
+
+  if (isUiSave) {
+    const merged: AccountData = {
+      config: {
+        ...existing.config,
+        ...incomingConfig,
+        pointer: existing.config.pointer,
+        promptPointer: existing.config.promptPointer,
+      },
+      prompts: data.prompts,
+      texts: data.texts,
+      captions: data.captions,
+      lastRun: existing.lastRun,
+      lastStatus: existing.lastStatus,
+    };
+    await setAccountData(session.userId, accountId, merged);
+  } else {
+    await setAccountData(session.userId, accountId, data);
   }
-  await setAccountData(session.userId, accountId, data);
   return NextResponse.json({ ok: true });
 }
