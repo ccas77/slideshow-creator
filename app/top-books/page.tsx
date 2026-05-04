@@ -99,6 +99,8 @@ export default function TopBooksPage() {
   const [topnAutoConfig, setTopnAutoConfig] = useState<TopNGlobalAutomation>({ accounts: {} });
   const [selectedTopnAccount, setSelectedTopnAccount] = useState<string>("");
   const [savingAuto, setSavingAuto] = useState(false);
+  const [describingImage, setDescribingImage] = useState(false);
+  const [bgImageUrl, setBgImageUrl] = useState("");
 
   // Music
   const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
@@ -918,6 +920,79 @@ export default function TopBooksPage() {
                         placeholder="e.g. A dark moody bookshelf with candlelight"
                         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                       />
+                      <div className="mt-2 space-y-2">
+                        <p className="text-[11px] text-gray-400">Generate a prompt from an image:</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={bgImageUrl}
+                            onChange={(e) => setBgImageUrl(e.target.value)}
+                            placeholder="Paste image URL"
+                            className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          />
+                          <button
+                            disabled={describingImage || !bgImageUrl.trim()}
+                            onClick={async () => {
+                              setDescribingImage(true);
+                              try {
+                                const res = await fetch("/api/describe-image", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ imageUrl: bgImageUrl.trim() }),
+                                });
+                                const json = await res.json();
+                                if (json.prompt) {
+                                  const existing = config.backgroundPrompts || [];
+                                  updateSelectedConfig({ backgroundPrompts: [...existing, json.prompt] });
+                                  setBgImageUrl("");
+                                } else {
+                                  alert(json.error || "Failed to describe image");
+                                }
+                              } catch (e) { alert(String(e)); }
+                              finally { setDescribingImage(false); }
+                            }}
+                            className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs hover:bg-gray-300 disabled:opacity-50"
+                          >
+                            {describingImage ? "..." : "Get prompt"}
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="rounded-lg bg-gray-200 px-3 py-1.5 text-xs hover:bg-gray-300 cursor-pointer text-center">
+                            Upload image
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setDescribingImage(true);
+                                try {
+                                  const reader = new FileReader();
+                                  const base64 = await new Promise<string>((resolve) => {
+                                    reader.onload = () => resolve(reader.result as string);
+                                    reader.readAsDataURL(file);
+                                  });
+                                  const res = await fetch("/api/describe-image", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ imageBase64: base64 }),
+                                  });
+                                  const json = await res.json();
+                                  if (json.prompt) {
+                                    const existing = config.backgroundPrompts || [];
+                                    updateSelectedConfig({ backgroundPrompts: [...existing, json.prompt] });
+                                  } else {
+                                    alert(json.error || "Failed to describe image");
+                                  }
+                                } catch (err) { alert(String(err)); }
+                                finally { setDescribingImage(false); e.target.value = ""; }
+                              }}
+                            />
+                          </label>
+                          {describingImage && <span className="text-xs text-gray-400">Analyzing image...</span>}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Time windows */}

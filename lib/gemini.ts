@@ -42,3 +42,29 @@ export async function generateImageWithInfo(prompt: string): Promise<ImageResult
   }
   return { data: null, error: errors.join(" | ") };
 }
+
+export async function describeImageForPrompt(imageBase64: string): Promise<string> {
+  const base64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            inlineData: {
+              mimeType: "image/png",
+              data: base64,
+            },
+          },
+          {
+            text: "Describe this image as a concise prompt that could be used to generate a similar background image with AI. Focus on the mood, colors, lighting, textures, and composition. Do NOT mention any text, words, or people. Output only the prompt, nothing else.",
+          },
+        ],
+      },
+    ],
+  });
+  const text = response.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("No description returned");
+  return text.trim();
+}
