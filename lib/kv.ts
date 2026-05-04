@@ -410,6 +410,7 @@ export interface TopNAccountConfig {
   frequencyDays: number;   // post every N days (1 = daily)
   lastPostDate?: string;   // YYYY-MM-DD of last successful post
   platform: "tiktok-carousel" | "tiktok-video" | "fb-video" | "ig-carousel" | "ig-video";
+  backgroundPrompts?: string[]; // account-level bg prompts (overrides list-level)
 }
 
 export interface TopNGlobalAutomation {

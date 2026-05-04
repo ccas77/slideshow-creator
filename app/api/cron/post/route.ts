@@ -720,6 +720,7 @@ export async function GET(req: NextRequest) {
             accountIds: [Number(topNJob.accIdStr)],
             scheduledAt: scheduledAt.toISOString(),
             platform: topNJob.accConfig.platform,
+            backgroundPrompts: topNJob.accConfig.backgroundPrompts,
           });
           topNResults.push({
             userId: topNJob.user.id,

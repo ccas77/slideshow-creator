@@ -19,6 +19,7 @@ export interface PublishTopNOptions {
   accountIds: number[];
   scheduledAt?: string; // ISO string
   platform?: "tiktok-carousel" | "tiktok-video" | "fb-video" | "ig-carousel" | "ig-video";
+  backgroundPrompts?: string[]; // account-level override for list bg prompts
 }
 
 export interface PublishTopNResult {
@@ -31,7 +32,7 @@ export interface PublishTopNResult {
  * Internal: generates slides for a list.
  * Shared by publishTopN and previewTopN.
  */
-async function generateTopNSlides(userId: string, listId: string, maxBooks?: number) {
+async function generateTopNSlides(userId: string, listId: string, maxBooks?: number, bgPromptsOverride?: string[]) {
   const [lists, allBooks] = await Promise.all([
     getTopNLists(userId),
     getTopBooks(userId),
@@ -57,9 +58,11 @@ async function generateTopNSlides(userId: string, listId: string, maxBooks?: num
   const finalOrder = shuffle(selected);
 
   let bgImage: string | null = null;
-  if (list.backgroundPrompts && list.backgroundPrompts.length > 0) {
-    const prompt =
-      list.backgroundPrompts[Math.floor(Math.random() * list.backgroundPrompts.length)];
+  const bgPrompts = bgPromptsOverride && bgPromptsOverride.length > 0
+    ? bgPromptsOverride
+    : list.backgroundPrompts;
+  if (bgPrompts && bgPrompts.length > 0) {
+    const prompt = bgPrompts[Math.floor(Math.random() * bgPrompts.length)];
     bgImage = await generateImage(prompt);
   }
 
@@ -100,7 +103,7 @@ export async function publishTopN(
   let slideCount = 0;
   const { userId, listId, accountIds, scheduledAt } = opts;
   try {
-    const { list, slideBufs, finalOrder, audioBuffer } = await generateTopNSlides(userId, listId);
+    const { list, slideBufs, finalOrder, audioBuffer } = await generateTopNSlides(userId, listId, undefined, opts.backgroundPrompts);
     slideCount = slideBufs.length;
 
     const isVideo = opts.platform === "tiktok-video" || opts.platform === "fb-video" || opts.platform === "ig-video";
