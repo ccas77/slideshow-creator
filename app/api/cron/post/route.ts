@@ -748,7 +748,7 @@ export async function GET(req: NextRequest) {
         updated[topNJob.accIdStr] = {
           ...topNJob.accConfig,
           pointer: topNJob.accConfig.pointer + 1,
-          lastPostDate: today,
+          lastPostDate: new Date().toISOString().slice(0, 10),
         };
       }
     }

@@ -8,21 +8,37 @@ async function fetchWithRetry(
   retries = MAX_RETRIES
 ): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
-  const res = await fetch(url, init);
-  if (res.status === 429) {
-    if (method !== "GET") {
-      const path = url.replace(PB_BASE, "");
-      console.log(`[post-bridge] 429 on ${method} ${path} — NOT retrying to avoid duplicate posts. Caller should handle.`);
+  const path = url.replace(PB_BASE, "");
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.status === 429) {
+        if (method !== "GET") {
+          console.log(`[post-bridge] 429 on ${method} ${path} — NOT retrying to avoid duplicate posts.`);
+          return res;
+        }
+        if (attempt < retries) {
+          const wait = Math.pow(2, attempt) * 1000;
+          console.log(`[post-bridge] 429 on GET ${path}, retry ${attempt + 1} in ${wait}ms...`);
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+      }
       return res;
-    }
-    if (retries > 0) {
-      const wait = Math.pow(2, MAX_RETRIES - retries) * 1000; // 1s, 2s, 4s
-      console.log(`[post-bridge] 429 rate limited on GET, retrying in ${wait}ms...`);
-      await new Promise((r) => setTimeout(r, wait));
-      return fetchWithRetry(url, init, retries - 1);
+    } catch (err) {
+      lastError = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt < retries) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.log(`[post-bridge] network error on ${method} ${path}: ${msg}, retry ${attempt + 1} in ${wait}ms...`);
+        await new Promise((r) => setTimeout(r, wait));
+      } else {
+        console.error(`[post-bridge] network error on ${method} ${path}: ${msg}, no retries left`);
+      }
     }
   }
-  return res;
+  throw lastError;
 }
 
 export async function pbFetch(path: string, init: RequestInit = {}) {
@@ -41,6 +57,37 @@ export async function pbFetch(path: string, init: RequestInit = {}) {
   return res.json();
 }
 
+async function s3PutWithRetry(
+  uploadUrl: string,
+  contentType: string,
+  buffer: Buffer,
+  retries = MAX_RETRIES
+): Promise<void> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: new Uint8Array(buffer),
+      });
+      if (!putRes.ok) {
+        const t = await putRes.text();
+        throw new Error(`S3 upload failed: ${putRes.status} ${t}`);
+      }
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt < retries) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.log(`[post-bridge] S3 PUT error: ${msg}, retry ${attempt + 1} in ${wait}ms...`);
+        await new Promise((r) => setTimeout(r, wait));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 export async function uploadPng(
   buffer: Buffer,
   name: string
@@ -53,15 +100,7 @@ export async function uploadPng(
       size_bytes: buffer.length,
     }),
   });
-  const putRes = await fetch(upload.upload_url, {
-    method: "PUT",
-    headers: { "Content-Type": "image/png" },
-    body: new Uint8Array(buffer),
-  });
-  if (!putRes.ok) {
-    const t = await putRes.text();
-    throw new Error(`S3 upload failed: ${putRes.status} ${t}`);
-  }
+  await s3PutWithRetry(upload.upload_url, "image/png", buffer);
   return upload.media_id;
 }
 
@@ -77,15 +116,7 @@ export async function uploadVideo(
       size_bytes: buffer.length,
     }),
   });
-  const putRes = await fetch(upload.upload_url, {
-    method: "PUT",
-    headers: { "Content-Type": "video/mp4" },
-    body: new Uint8Array(buffer),
-  });
-  if (!putRes.ok) {
-    const t = await putRes.text();
-    throw new Error(`S3 video upload failed: ${putRes.status} ${t}`);
-  }
+  await s3PutWithRetry(upload.upload_url, "video/mp4", buffer);
   return upload.media_id;
 }
 
