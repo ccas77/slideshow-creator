@@ -19,7 +19,7 @@ import { renderSlide } from "@/lib/render-slide";
 import { listTikTokAccounts, pbFetch, uploadPng } from "@/lib/post-bridge";
 import { publishTopN } from "@/lib/topn-publisher";
 
-export const maxDuration = 300; // 5 min for Hobby
+export const maxDuration = 800; // Pro max
 
 function pickRandom<T>(arr: T[]): T | null {
   if (!arr.length) return null;
