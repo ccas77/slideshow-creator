@@ -60,15 +60,12 @@ export async function renderVideo(
     const concatList: string[] = [];
     for (let i = 0; i < slides.length; i++) {
       const clipPath = join(workDir, `clip-${i}.mp4`);
-      const fadeIn = i > 0 ? `fade=in:0:12,` : "";
-      const fadeOut = i < slides.length - 1 ? `fade=out:st=${durationPerSlide - 0.5}:d=0.5,` : "";
-
       await execFileAsync(ffmpegPath, [
         "-y",
         "-loop", "1",
         "-i", join(workDir, `slide-${String(i).padStart(3, "0")}.png`),
         "-t", String(durationPerSlide),
-        "-vf", `${fadeIn}${fadeOut}scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2`,
+        "-vf", `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2`,
         "-c:v", "libx264", "-preset", "ultrafast",
         "-pix_fmt", "yuv420p",
         "-r", "24",
