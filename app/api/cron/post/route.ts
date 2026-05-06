@@ -507,8 +507,12 @@ export async function GET(req: NextRequest) {
       try {
         const data = accountDataMap.get(k);
         if (data) {
-          const newPointer = pointerUpdates.get(k);
-          const newPromptPointer = promptPointerUpdates.get(k);
+          // Bump pointers by 1 extra so daily rotation doesn't repeat
+          // when windows_per_day is a multiple of candidates.length
+          const rawPointer = pointerUpdates.get(k);
+          const newPointer = rawPointer !== undefined ? rawPointer + 1 : undefined;
+          const rawPromptPointer = promptPointerUpdates.get(k);
+          const newPromptPointer = rawPromptPointer !== undefined ? rawPromptPointer + 1 : undefined;
           const existingHistory = data.recentPosts || [];
           const newHistory = [...(keyNewPosts.get(k) || []), ...existingHistory].slice(0, 20);
           await setAccountData(userId, accId, {
