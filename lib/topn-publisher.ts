@@ -40,9 +40,17 @@ async function generateTopNSlides(userId: string, listId: string, maxBooks?: num
   const list = lists.find((l) => l.id === listId);
   if (!list) throw new Error("List not found");
 
-  const poolBooks = list.bookIds
+  const manualBooks = list.bookIds
     .map((id) => allBooks.find((b) => b.id === id))
     .filter((b): b is TopBook => !!b);
+  const genreBooks = (list.genres && list.genres.length > 0)
+    ? allBooks.filter((b) => {
+        if (list.bookIds.includes(b.id)) return false;
+        const bookGenres = b.genre ? b.genre.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) : [];
+        return bookGenres.some((g) => list.genres!.some((lg) => lg.toLowerCase() === g));
+      })
+    : [];
+  const poolBooks = [...manualBooks, ...genreBooks];
 
   const pinned = poolBooks.filter((b) => b.pinned);
   const unpinned = shuffle(poolBooks.filter((b) => !b.pinned));

@@ -672,7 +672,7 @@ export async function GET(req: NextRequest) {
           }
 
           // Build eligible list pool
-          let pool = topNLists.filter((l) => l.bookIds.length > 0);
+          let pool = topNLists.filter((l) => l.bookIds.length > 0 || (l.genres && l.genres.length > 0));
           if (accConfig.listIds.length > 0) {
             pool = pool.filter((l) => accConfig.listIds.includes(l.id));
           }

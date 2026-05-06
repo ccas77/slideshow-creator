@@ -39,6 +39,7 @@ interface TopNList {
   titleTexts: string[];
   count: number;
   bookIds: string[];
+  genres?: string[];
   captions: string[];
   backgroundPrompts: string[];
   musicTrackIds?: string[];
@@ -87,6 +88,7 @@ export default function TopBooksPage() {
   const [listCaptions, setListCaptions] = useState("");
   const [listBgPrompts, setListBgPrompts] = useState("");
   const [listMusicTrackIds, setListMusicTrackIds] = useState<string[]>([]);
+  const [listGenres, setListGenres] = useState<string[]>([]);
 
   // Publish
   const [publishListId, setPublishListId] = useState<string | null>(null);
@@ -307,6 +309,7 @@ export default function TopBooksPage() {
       setListTitles((list.titleTexts || []).join("\n"));
       setListCount(list.count);
       setListBookIds(list.bookIds);
+      setListGenres(list.genres || []);
       setListCaptions((list.captions || []).join("\n\n"));
       setListBgPrompts((list.backgroundPrompts || []).join("\n"));
       setListMusicTrackIds(list.musicTrackIds || []);
@@ -316,6 +319,7 @@ export default function TopBooksPage() {
       setListTitles("");
       setListCount(10);
       setListBookIds([]);
+      setListGenres([]);
       setListCaptions("");
       setListBgPrompts("");
       setListMusicTrackIds([]);
@@ -333,7 +337,7 @@ export default function TopBooksPage() {
     if (editListId) {
       updated = updated.map((l: TopNList) =>
         l.id === editListId
-          ? { ...l, name: listName, titleTexts: parsedTitles, count: listCount, bookIds: listBookIds, captions: parsedCaptions, backgroundPrompts: parsedBgPrompts, musicTrackIds: listMusicTrackIds }
+          ? { ...l, name: listName, titleTexts: parsedTitles, count: listCount, bookIds: listBookIds, genres: listGenres, captions: parsedCaptions, backgroundPrompts: parsedBgPrompts, musicTrackIds: listMusicTrackIds }
           : l
       );
     } else {
@@ -343,6 +347,7 @@ export default function TopBooksPage() {
         titleTexts: parsedTitles,
         count: listCount,
         bookIds: listBookIds,
+        genres: listGenres,
         captions: parsedCaptions,
         backgroundPrompts: parsedBgPrompts,
         musicTrackIds: listMusicTrackIds,
@@ -1200,6 +1205,34 @@ export default function TopBooksPage() {
                   </div>
                 ) : (
                   <p className="text-[11px] text-gray-400 mb-2">No music tracks uploaded yet. Upload tracks in the Music tab.</p>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-2">
+                  Auto-select by genre ({listGenres.length} selected)
+                </label>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {genres.map((g) => {
+                    const selected = listGenres.includes(g);
+                    return (
+                      <button
+                        key={g}
+                        onClick={() => setListGenres(selected ? listGenres.filter((x) => x !== g) : [...listGenres, g])}
+                        className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                          selected
+                            ? "bg-green-100 border-green-500 text-green-700 border"
+                            : "border border-gray-200 text-gray-500 hover:border-gray-300"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    );
+                  })}
+                </div>
+                {listGenres.length > 0 && (
+                  <p className="text-[11px] text-gray-400 mb-3">
+                    Books matching these genres will be automatically included.
+                  </p>
                 )}
               </div>
               <div>
