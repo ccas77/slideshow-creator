@@ -404,6 +404,33 @@ export async function GET(req: NextRequest) {
       await markScheduled(allSchedKeys);
     }
 
+    // Save pointers NOW — before heavy work. If the cron times out during
+    // image generation or posting, the pointer is already advanced so the
+    // next run won't pick the same slideshows.
+    for (const [k, rawPointer] of pointerUpdates) {
+      const [userId, accIdStr] = k.split(":");
+      const accId = Number(accIdStr);
+      const data = accountDataMap.get(k);
+      if (!data) continue;
+      const rawPromptPointer = promptPointerUpdates.get(k);
+      const newPointer = rawPointer + 1; // +1 bump to shift daily start
+      const newPromptPointer = rawPromptPointer !== undefined ? rawPromptPointer + 1 : data.config.promptPointer;
+      try {
+        await setAccountData(userId, accId, {
+          ...data,
+          config: {
+            ...data.config,
+            pointer: newPointer,
+            promptPointer: newPromptPointer,
+          },
+        }, "cron-pointer-early");
+        debugLog.push(`Early pointer save ${k}: pointer=${newPointer}, promptPointer=${newPromptPointer}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        debugLog.push(`Early pointer save FAILED ${k}: ${msg}`);
+      }
+    }
+
     // Phase 2+3: Generate image, render slides, and post — one job at a time
     const postResults: Array<{ job: Job; status: string; scheduledAt?: string; postId?: string }> = [];
 
@@ -505,28 +532,16 @@ export async function GET(req: NextRequest) {
         status,
       });
       try {
-        const data = accountDataMap.get(k);
-        if (data) {
-          // Bump pointers by 1 extra so daily rotation doesn't repeat
-          // when windows_per_day is a multiple of candidates.length
-          const rawPointer = pointerUpdates.get(k);
-          const newPointer = rawPointer !== undefined ? rawPointer + 1 : undefined;
-          const rawPromptPointer = promptPointerUpdates.get(k);
-          const newPromptPointer = rawPromptPointer !== undefined ? rawPromptPointer + 1 : undefined;
-          const existingHistory = data.recentPosts || [];
-          const newHistory = [...(keyNewPosts.get(k) || []), ...existingHistory].slice(0, 20);
-          await setAccountData(userId, accId, {
-            ...data,
-            config: {
-              ...data.config,
-              ...(newPointer !== undefined ? { pointer: newPointer } : {}),
-              ...(newPromptPointer !== undefined ? { promptPointer: newPromptPointer } : {}),
-            },
-            lastRun: new Date().toISOString(),
-            lastStatus: status,
-            recentPosts: newHistory,
-          }, "cron");
-        }
+        // Read fresh data (pointer was already saved early, don't overwrite it)
+        const freshData = await getAccountData(userId, accId);
+        const existingHistory = freshData.recentPosts || [];
+        const newHistory = [...(keyNewPosts.get(k) || []), ...existingHistory].slice(0, 20);
+        await setAccountData(userId, accId, {
+          ...freshData,
+          lastRun: new Date().toISOString(),
+          lastStatus: status,
+          recentPosts: newHistory,
+        }, "cron-status");
       } catch (saveErr) {
         const msg = saveErr instanceof Error ? saveErr.message : String(saveErr);
         debugLog.push(`Save error for ${k}: ${msg}`);
