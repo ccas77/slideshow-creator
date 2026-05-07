@@ -134,13 +134,13 @@ export async function publishTopN(
 
     const platformConfigurations: Record<string, unknown> = {};
     if (opts.platform === "tiktok-video" || opts.platform === "tiktok-carousel") {
-      platformConfigurations.tiktok = { draft: false, is_aigc: true };
+      platformConfigurations.tiktok = { draft: false, is_aigc: false };
     } else if (opts.platform === "ig-carousel" || opts.platform === "ig-video") {
       platformConfigurations.instagram = {};
     } else if (opts.platform === "fb-video") {
       platformConfigurations.facebook = {};
     } else {
-      platformConfigurations.tiktok = { draft: false, is_aigc: true };
+      platformConfigurations.tiktok = { draft: false, is_aigc: false };
       platformConfigurations.instagram = {};
     }
 
