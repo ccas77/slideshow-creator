@@ -818,7 +818,14 @@ export default function TopBooksPage() {
             ) : (
               <div className="space-y-3">
                 {lists.map((l) => {
-                  const listBooks = l.bookIds.map((id) => books.find((b) => b.id === id)).filter(Boolean) as TopBook[];
+                  const manualBooks = l.bookIds.map((id) => books.find((b) => b.id === id)).filter(Boolean) as TopBook[];
+                  const genreBooks = (l.genres && l.genres.length > 0)
+                    ? books.filter((b) => {
+                        const bg = parseGenres(b.genre);
+                        return bg.some((g) => l.genres!.some((lg) => lg.toLowerCase() === g.toLowerCase())) && !l.bookIds.includes(b.id);
+                      })
+                    : [];
+                  const listBooks = [...manualBooks, ...genreBooks];
                   return (
                     <div key={l.id} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -828,6 +835,7 @@ export default function TopBooksPage() {
                           </div>
                           <div className="text-sm text-gray-500 mt-1">
                             {(l.titleTexts || []).length} title{(l.titleTexts || []).length !== 1 ? "s" : ""} &middot; {l.count} books from {listBooks.length} in pool
+                            {l.genres && l.genres.length > 0 && <span className="text-green-600"> ({l.genres.join(", ")})</span>}
                           </div>
                           {listBooks.length > 0 && (
                             <div className="flex gap-1 mt-2 flex-wrap">
