@@ -650,6 +650,7 @@ export async function GET(req: NextRequest) {
       selectedList: Awaited<ReturnType<typeof getTopNLists>>[0];
       activeWindows: { start: string; end: string }[];
       schedKeys: string[];
+      _finalPointer: number;
     }
     const topNJobs: TopNJob[] = [];
     const topNAutoByUser = new Map<string, { auto: Awaited<ReturnType<typeof getTopNAutomation>>; updated: Record<string, typeof topNJobs[0]["accConfig"]> }>();
@@ -688,11 +689,16 @@ export async function GET(req: NextRequest) {
           });
           if (activeWindows.length === 0) continue;
 
-          const listIndex = accConfig.pointer % pool.length;
-          const selectedList = pool[listIndex];
           const schedKeys = activeWindows.map((w) => `topn:${user.id}:${accIdStr}:${w.start}`);
 
-          topNJobs.push({ user, accIdStr, accConfig, selectedList, activeWindows, schedKeys });
+          // Build one job per window, each picking a different list via pointer rotation
+          let currentPointer = accConfig.pointer;
+          for (const win of activeWindows) {
+            const listIndex = currentPointer % pool.length;
+            const selectedList = pool[listIndex];
+            currentPointer++;
+            topNJobs.push({ user, accIdStr, accConfig, selectedList, activeWindows: [win], schedKeys: [schedKeys[activeWindows.indexOf(win)]], _finalPointer: currentPointer });
+          }
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -751,7 +757,7 @@ export async function GET(req: NextRequest) {
         const { updated } = topNAutoByUser.get(userId)!;
         updated[topNJob.accIdStr] = {
           ...topNJob.accConfig,
-          pointer: topNJob.accConfig.pointer + 1,
+          pointer: topNJob._finalPointer,
           lastPostDate: new Date().toISOString().slice(0, 10),
         };
       }
