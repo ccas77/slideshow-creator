@@ -332,7 +332,7 @@ export async function POST(req: NextRequest) {
           media: mediaIds,
           social_accounts: accountIds,
           platform_configurations: {
-            tiktok: { draft: false, is_aigc: true },
+            tiktok: { draft: false, is_aigc: false },
           },
         }),
       });

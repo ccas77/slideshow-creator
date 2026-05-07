@@ -443,7 +443,7 @@ export async function GET(req: NextRequest) {
             social_accounts: [job.acc.id],
             scheduled_at: scheduledAt.toISOString(),
             platform_configurations: {
-              tiktok: { draft: false, is_aigc: true },
+              tiktok: { draft: false, is_aigc: false },
             },
           }),
         });
@@ -612,7 +612,7 @@ export async function GET(req: NextRequest) {
             media: mediaIds,
             social_accounts: [acc.id],
             scheduled_at: scheduledAt.toISOString(),
-            platform_configurations: { tiktok: { draft: false, is_aigc: true } },
+            platform_configurations: { tiktok: { draft: false, is_aigc: false } },
           }),
         });
         const postId = postResp.id || postResp.data?.id || "unknown";
@@ -866,7 +866,7 @@ export async function GET(req: NextRequest) {
               const isIg = igAuto.igAccountIds?.includes(accId) || !igAuto.tiktokAccountIds?.includes(accId);
               const platformCfg = isIg
                 ? { instagram: {} }
-                : { tiktok: { draft: false, is_aigc: true } };
+                : { tiktok: { draft: false, is_aigc: false } };
 
               const scheduledAt = randomTimeInWindow(win.start, win.end);
               const postResp = await pbFetch("/v1/posts", {
