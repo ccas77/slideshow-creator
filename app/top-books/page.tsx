@@ -640,7 +640,7 @@ export default function TopBooksPage() {
       if (!b.title.toLowerCase().includes(q) && !b.author.toLowerCase().includes(q) && !b.genre.toLowerCase().includes(q)) return false;
     }
     return true;
-  });
+  }).sort((a, b) => (a.pinned === b.pinned ? 0 : a.pinned ? -1 : 1));
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] text-gray-900">
