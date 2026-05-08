@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       captions: data.captions,
       lastRun: existing.lastRun,
       lastStatus: existing.lastStatus,
+      recentPosts: existing.recentPosts,
     };
     await setAccountData(session.userId, accountId, merged, "ui-save");
   } else {
