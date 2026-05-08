@@ -36,15 +36,40 @@ export default function PostLogPage() {
   const [entries, setEntries] = useState<PostLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
 
-  useEffect(() => {
+  function loadLog() {
     setLoading(true);
     fetch(`/api/post-log?date=${date}`)
       .then((r) => r.json())
       .then((d) => setEntries(d.entries || []))
       .catch(() => setEntries([]))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadLog();
   }, [date]);
+
+  async function syncFromPostBridge() {
+    setSyncing(true);
+    setSyncMsg("");
+    try {
+      const r = await fetch("/api/post-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date }),
+      });
+      const d = await r.json();
+      setEntries(d.entries || []);
+      setSyncMsg(`Synced — ${d.added || 0} new posts pulled from PostBridge`);
+    } catch {
+      setSyncMsg("Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const filtered = entries.filter((e) => {
     if (!filter) return true;
@@ -98,6 +123,13 @@ export default function PostLogPage() {
               className="border rounded px-3 py-1.5 text-sm w-72"
             />
           </div>
+          <button
+            onClick={syncFromPostBridge}
+            disabled={syncing}
+            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {syncing ? "Syncing..." : "Sync from PostBridge"}
+          </button>
           <div className="text-sm text-gray-500">
             {filtered.length} posts
             {dupeCount > 0 && (
@@ -105,6 +137,7 @@ export default function PostLogPage() {
                 ({dupeCount} potential duplicates)
               </span>
             )}
+            {syncMsg && <span className="ml-2 text-green-600">{syncMsg}</span>}
           </div>
         </div>
 
