@@ -71,6 +71,21 @@ export default function PostLogPage() {
     }
   }
 
+  async function backfill() {
+    setSyncing(true);
+    setSyncMsg("");
+    try {
+      const r = await fetch("/api/post-log/backfill", { method: "POST" });
+      const d = await r.json();
+      setSyncMsg(`Backfilled ${d.entriesAdded} posts from ${d.accountsWithData} accounts (${(d.datesFound || []).join(", ")})`);
+      loadLog();
+    } catch {
+      setSyncMsg("Backfill failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const filtered = entries.filter((e) => {
     if (!filter) return true;
     const q = filter.toLowerCase();
@@ -82,11 +97,13 @@ export default function PostLogPage() {
     );
   });
 
-  // Detect duplicates: same account + same slideshowId on the same day
+  // Detect duplicates: same account + same slideshow on the same day
+  // Use slideshowName (available from cron log and backfill) as the identifier
   const dupeKeys = new Set<string>();
   const seen = new Map<string, number>();
   for (const e of filtered) {
-    const key = `${e.accountId}:${e.slideshowId || e.slideshowName}`;
+    if (!e.slideshowName) continue; // Can't detect without slideshow info
+    const key = `${e.accountId}:${e.slideshowName}`;
     seen.set(key, (seen.get(key) || 0) + 1);
   }
   for (const [key, count] of seen) {
@@ -94,7 +111,8 @@ export default function PostLogPage() {
   }
 
   const dupeCount = filtered.filter((e) => {
-    const key = `${e.accountId}:${e.slideshowId || e.slideshowName}`;
+    if (!e.slideshowName) return false;
+    const key = `${e.accountId}:${e.slideshowName}`;
     return dupeKeys.has(key);
   }).length;
 
@@ -130,6 +148,13 @@ export default function PostLogPage() {
           >
             {syncing ? "Syncing..." : "Sync from PostBridge"}
           </button>
+          <button
+            onClick={backfill}
+            disabled={syncing}
+            className="px-4 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+          >
+            {syncing ? "..." : "Backfill History"}
+          </button>
           <div className="text-sm text-gray-500">
             {filtered.length} posts
             {dupeCount > 0 && (
@@ -162,8 +187,8 @@ export default function PostLogPage() {
               </thead>
               <tbody>
                 {filtered.map((e, i) => {
-                  const key = `${e.accountId}:${e.slideshowId || e.slideshowName}`;
-                  const isDupe = dupeKeys.has(key);
+                  const key = e.slideshowName ? `${e.accountId}:${e.slideshowName}` : "";
+                  const isDupe = key ? dupeKeys.has(key) : false;
                   return (
                     <tr
                       key={i}
