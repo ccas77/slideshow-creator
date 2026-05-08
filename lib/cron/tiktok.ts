@@ -4,6 +4,7 @@ import {
   getBooks,
   getBookCover,
   getAppSettings,
+  appendPostLog,
 } from "@/lib/kv";
 import { listUsers } from "@/lib/auth";
 import { generateImageWithInfo } from "@/lib/gemini";
@@ -117,8 +118,11 @@ export async function runTikTokPhase(
           debugLog.push(`Window ${win.start}-${win.end}: shouldProcess=${willProcess}, alreadyScheduled=${alreadyScheduled}`);
           if (!willProcess || alreadyScheduled) continue;
           let imagePrompt = "";
+          let imagePromptId = "";
           let slideTexts: string[] = [];
+          let slideshowId = "";
           let captionText = "";
+          let captionId = "";
           let source = "";
           let coverImage: string | undefined;
           let slideshowName = "";
@@ -176,6 +180,7 @@ export async function runTikTokPhase(
               continue;
             }
             imagePrompt = pickedPrompt.value;
+            imagePromptId = pickedPrompt.id || "";
             slideTexts = pickedSlideshow.slideTexts
               .split("\n")
               .map((t) => t.trim())
@@ -184,6 +189,8 @@ export async function runTikTokPhase(
               slideTexts = slideTexts.slice(0, -1);
             }
             captionText = pickedCaption?.value || "";
+            captionId = pickedCaption?.id || "";
+            slideshowId = pickedSlideshow.id;
             coverImage = book.coverImage;
             bookName = book.name;
             slideshowName = pickedSlideshow.name;
@@ -198,11 +205,13 @@ export async function runTikTokPhase(
               continue;
             }
             imagePrompt = prompt.value;
+            imagePromptId = prompt.name || "";
             slideTexts = textSet.value
               .split("\n")
               .map((t) => t.trim())
               .filter(Boolean);
             captionText = captionItem?.value || "";
+            captionId = captionItem?.name || "";
             source = "legacy-saved";
           }
 
@@ -213,8 +222,11 @@ export async function runTikTokPhase(
             acc,
             win,
             imagePrompt,
+            imagePromptId,
             slideTexts,
+            slideshowId,
             captionText,
+            captionId,
             source,
             coverImage,
             schedKey,
@@ -311,12 +323,33 @@ export async function runTikTokPhase(
       });
 
       const postId = postResp.id || postResp.data?.id || "unknown";
+      const postUrl = postResp.url || postResp.data?.url || "";
       postResults.push({
         job,
         status: `scheduled ${job.slideTexts.length} slides for ${scheduledAt.toISOString()} (${job.source}) [post:${postId}]`,
         scheduledAt: scheduledAt.toISOString(),
         postId: String(postId),
       });
+
+      const now = new Date();
+      await appendPostLog({
+        date: now.toISOString().slice(0, 10),
+        time: now.toISOString().slice(11, 16),
+        accountId: job.acc.id,
+        accountName: job.acc.username,
+        bookName: job.bookName,
+        slideshowId: job.slideshowId,
+        slideshowName: job.slideshowName,
+        imagePromptId: job.imagePromptId,
+        imagePromptText: job.imagePrompt.slice(0, 100),
+        captionId: job.captionId,
+        captionText: job.captionText.slice(0, 100),
+        postBridgeId: String(postId),
+        postBridgeUrl: String(postUrl),
+        source: "cron",
+        userId: job.userId,
+        timestamp: now.toISOString(),
+      }).catch(() => {});
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       debugLog.push(`${job.acc.username} (${job.acc.id}) ${job.win.start}: job error — ${msg}`);
@@ -458,8 +491,29 @@ export async function runTikTokPhase(
         }),
       });
       const postId = postResp.id || postResp.data?.id || "unknown";
+      const postUrl = postResp.url || postResp.data?.url || "";
       const status = `fallback: scheduled ${finalTexts.length} slides for ${scheduledAt.toISOString()} (book:${book.name}/${pickedSlideshow.name}) [post:${postId}]`;
       results.push({ userId: user.id, accountId: acc.id, username: acc.username, status });
+
+      const fbNow = new Date();
+      await appendPostLog({
+        date: fbNow.toISOString().slice(0, 10),
+        time: fbNow.toISOString().slice(11, 16),
+        accountId: acc.id,
+        accountName: acc.username,
+        bookName: book.name,
+        slideshowId: pickedSlideshow.id,
+        slideshowName: pickedSlideshow.name,
+        imagePromptId: pickedPrompt.id || "",
+        imagePromptText: pickedPrompt.value.slice(0, 100),
+        captionId: "",
+        captionText: captionText.slice(0, 100),
+        postBridgeId: String(postId),
+        postBridgeUrl: String(postUrl),
+        source: "cron-fallback",
+        userId: user.id,
+        timestamp: fbNow.toISOString(),
+      }).catch(() => {});
 
       await markScheduled([`${user.id}:${acc.id}:fallback`]);
       const newPointer = ptr + 1;

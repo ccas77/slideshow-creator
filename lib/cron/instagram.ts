@@ -3,6 +3,7 @@ import {
   getIgSlideshows,
   setIgAutomation,
   getAppSettings,
+  appendPostLog,
 } from "@/lib/kv";
 import { listUsers } from "@/lib/auth";
 import { generateImageWithInfo } from "@/lib/gemini";
@@ -132,10 +133,31 @@ export async function runInstagramPhase(
               }),
             });
             const postId = postResp.id || postResp.data?.id || "unknown";
+            const postUrl = postResp.url || postResp.data?.url || "";
             igAutoResults.push({
               userId: user.id,
               status: `${ss.name} → ${accIdStr} at ${scheduledAt.toISOString()} [post:${postId}]`,
             });
+
+            const igNow = new Date();
+            await appendPostLog({
+              date: igNow.toISOString().slice(0, 10),
+              time: igNow.toISOString().slice(11, 16),
+              accountId: accId,
+              accountName: accIdStr,
+              bookName: "",
+              slideshowId: ss.id,
+              slideshowName: ss.name,
+              imagePromptId: prompt?.id || "",
+              imagePromptText: (prompt?.value || "").slice(0, 100),
+              captionId: caption?.id || "",
+              captionText: (caption?.value || "").slice(0, 100),
+              postBridgeId: String(postId),
+              postBridgeUrl: String(postUrl),
+              source: "cron-ig",
+              userId: user.id,
+              timestamp: igNow.toISOString(),
+            }).catch(() => {});
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             igAutoResults.push({ userId: user.id, status: `error (${accIdStr}): ${msg}` });

@@ -61,6 +61,7 @@ export default function AppHeader() {
           {link("/instagram", "Instagram")}
           {link("/top-books", "Top Books")}
           {link("/posts", "Posts")}
+          {link("/post-log", "Post Log")}
           {me?.role === "admin" && (
             <Link
               href="/admin"

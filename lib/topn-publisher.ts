@@ -24,6 +24,7 @@ export interface PublishTopNOptions {
 
 export interface PublishTopNResult {
   postId: string;
+  postUrl: string;
   slides: number;
   books: string[];
 }
@@ -159,6 +160,7 @@ export async function publishTopN(
 
     return {
       postId: postResp.id || postResp.data?.id || "unknown",
+      postUrl: postResp.url || postResp.data?.url || "",
       slides: slideBufs.length,
       books: finalOrder.map((b) => b.title),
     };

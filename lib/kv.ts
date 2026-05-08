@@ -547,6 +547,41 @@ export async function setAppSettings(
   await redis.set(settingsKey(userId), settings);
 }
 
+// ── Post Log ──────────────────────────────────────────────
+export interface PostLogEntry {
+  date: string;          // YYYY-MM-DD
+  time: string;          // HH:MM UTC
+  accountId: number;
+  accountName: string;
+  bookName: string;
+  slideshowId: string;
+  slideshowName: string;
+  imagePromptId: string;
+  imagePromptText: string;
+  captionId: string;
+  captionText: string;
+  postBridgeId: string;
+  postBridgeUrl: string;
+  source: string;        // "cron" | "cron-topn" | "cron-ig" | "cron-fallback"
+  userId: string;
+  timestamp: string;     // ISO string
+}
+
+const postLogKey = (date: string) => `post-log:${date}`;
+
+export async function appendPostLog(entry: PostLogEntry): Promise<void> {
+  const key = postLogKey(entry.date);
+  const existing = await redis.get<PostLogEntry[]>(key);
+  const updated = [...(existing || []), entry];
+  // Keep for 30 days
+  await redis.set(key, updated, { ex: 30 * 86400 });
+}
+
+export async function getPostLog(date: string): Promise<PostLogEntry[]> {
+  const data = await redis.get<PostLogEntry[]>(postLogKey(date));
+  return data || [];
+}
+
 export async function listAutomatedAccounts(
   userId: string,
   accountIds: number[]

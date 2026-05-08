@@ -2,6 +2,7 @@ import {
   getTopNLists,
   getTopNAutomation,
   setTopNAutomation,
+  appendPostLog,
 } from "@/lib/kv";
 import { listUsers } from "@/lib/auth";
 import { publishTopN } from "@/lib/topn-publisher";
@@ -108,6 +109,26 @@ export async function runTopNPhase(
           status: `${topNJob.accIdStr}: scheduled ${r.slides} slides for ${scheduledAt.toISOString()} [post:${r.postId}]`,
         });
         topnSuccessAccounts.add(`${topNJob.user.id}:${topNJob.accIdStr}`);
+
+        const now = new Date();
+        await appendPostLog({
+          date: now.toISOString().slice(0, 10),
+          time: now.toISOString().slice(11, 16),
+          accountId: Number(topNJob.accIdStr),
+          accountName: topNJob.accIdStr,
+          bookName: "",
+          slideshowId: "",
+          slideshowName: topNJob.selectedList.name,
+          imagePromptId: "",
+          imagePromptText: "",
+          captionId: "",
+          captionText: "",
+          postBridgeId: String(r.postId),
+          postBridgeUrl: String(r.postUrl || ""),
+          source: "cron-topn",
+          userId: topNJob.user.id,
+          timestamp: now.toISOString(),
+        }).catch(() => {});
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         topNResults.push({
