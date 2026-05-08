@@ -3,7 +3,7 @@ import { redis } from "@/lib/kv";
 const CRON_LOCK_KEY = "cron-lock";
 
 export async function acquireLock(): Promise<boolean> {
-  const result = await redis.set(CRON_LOCK_KEY, Date.now(), { nx: true, ex: 300 });
+  const result = await redis.set(CRON_LOCK_KEY, Date.now(), { nx: true, ex: 900 });
   return !!result;
 }
 
