@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, getAccountData, getPostLog, appendPostLog, PostLogEntry } from "@/lib/kv";
+import { getAccountData, getPostLog, appendPostLog, PostLogEntry } from "@/lib/kv";
 import { listUsers } from "@/lib/auth";
 import { listTikTokAccounts, pbFetch } from "@/lib/post-bridge";
 import { requireSession } from "@/lib/session";
@@ -7,7 +7,7 @@ import { requireSession } from "@/lib/session";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession(req);
+  const { error } = await requireSession(req);
   if (error) return error;
 
   const accounts = await listTikTokAccounts();
@@ -21,10 +21,6 @@ export async function POST(req: NextRequest) {
       if (!data.recentPosts || data.recentPosts.length === 0) continue;
 
       stats.accounts++;
-
-      // Get pointer audit log for this account
-      const auditKey = `u:${user.id}:pointer-audit:${acc.id}`;
-      const auditEntries = (await redis.get<string[]>(auditKey)) || [];
 
       // Build a map of PostBridge post ID -> URL by querying PostBridge
       const pbUrlMap = new Map<string, string>();
@@ -48,8 +44,7 @@ export async function POST(req: NextRequest) {
         const existing = await getPostLog(schedDate);
         if (existing.some((e) => e.postBridgeId === post.postId)) continue;
 
-        // Try to find the prompt pointer info from audit log around that timestamp
-        let imagePromptText = post.promptSnippet || "";
+        const imagePromptText = post.promptSnippet || "";
 
         const entry: PostLogEntry = {
           date: schedDate,
