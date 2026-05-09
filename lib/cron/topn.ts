@@ -68,8 +68,10 @@ export async function runTopNPhase(
         const schedKeys = activeWindows.map((w) => `topn:${user.id}:${accIdStr}:${w.start}`);
 
         // Build one job per window, each picking a different list via pointer rotation
+        // Cap windows to pool size so we never post the same list twice
         let currentPointer = accConfig.pointer;
-        for (const win of activeWindows) {
+        const windowsToProcess = activeWindows.slice(0, pool.length);
+        for (const win of windowsToProcess) {
           const listIndex = currentPointer % pool.length;
           const selectedList = pool[listIndex];
           currentPointer++;
