@@ -616,11 +616,13 @@ export default function TopBooksPage() {
   async function saveTopnAutomation() {
     setSavingAuto(true);
     try {
-      await fetch(`/api/topn-automation`, {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({ config: topnAutoConfig }),
-      });
+      for (const [accId, accConfig] of Object.entries(topnAutoConfig.accounts)) {
+        await fetch(`/api/topn-automation`, {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ accountId: accId, account: accConfig }),
+        });
+      }
       await load();
     } catch {}
     setSavingAuto(false);
