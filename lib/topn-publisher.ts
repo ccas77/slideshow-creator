@@ -54,13 +54,33 @@ async function generateTopNSlides(userId: string, listId: string, maxBooks?: num
   const poolBooks = [...manualBooks, ...genreBooks];
 
   const pinned = poolBooks.filter((b) => b.pinned);
-  const unpinned = shuffle(poolBooks.filter((b) => !b.pinned));
+  const unpinned = poolBooks.filter((b) => !b.pinned);
 
   const limit = maxBooks ?? list.count;
   const selected: TopBook[] = [...pinned];
+
+  // Group unpinned books by genre, shuffle within each group, then
+  // round-robin across genres for diversity
+  const genreMap = new Map<string, TopBook[]>();
   for (const b of unpinned) {
-    if (selected.length >= limit) break;
-    selected.push(b);
+    const g = b.genre ? b.genre.split(",")[0].trim().toLowerCase() || "other" : "other";
+    if (!genreMap.has(g)) genreMap.set(g, []);
+    genreMap.get(g)!.push(b);
+  }
+  const genreKeys = shuffle([...genreMap.keys()]);
+  for (const k of genreKeys) {
+    genreMap.set(k, shuffle(genreMap.get(k)!));
+  }
+  const genreQueues = genreKeys.map((k) => ({ genre: k, books: genreMap.get(k)! }));
+  let qi = 0;
+  while (selected.length < limit && genreQueues.some((q) => q.books.length > 0)) {
+    const q = genreQueues[qi % genreQueues.length];
+    qi++;
+    if (q.books.length === 0) continue;
+    const book = q.books.shift()!;
+    if (!selected.some((s) => s.id === book.id)) {
+      selected.push(book);
+    }
   }
   if (selected.length === 0) throw new Error("No books selected");
 
