@@ -29,6 +29,7 @@ export async function runTopNPhase(
     _finalPointer: number;
   }
   const topNJobs: TopNJob[] = [];
+  const excessSchedKeys: string[] = [];
   const topNAutoByUser = new Map<string, { auto: Awaited<ReturnType<typeof getTopNAutomation>>; updated: Record<string, typeof topNJobs[0]["accConfig"]> }>();
 
   for (const user of users) {
@@ -67,10 +68,14 @@ export async function runTopNPhase(
 
         const schedKeys = activeWindows.map((w) => `topn:${user.id}:${accIdStr}:${w.start}`);
 
-        // Build one job per window, each picking a different list via pointer rotation
-        // Cap windows to pool size so we never post the same list twice
+        // Cap windows to pool size so we never post the same list twice.
+        // Mark ALL window keys (including excess) so skipped windows don't fire on later cron runs.
         let currentPointer = accConfig.pointer;
         const windowsToProcess = activeWindows.slice(0, pool.length);
+        const excessKeys = activeWindows.slice(pool.length).map((w) => `topn:${user.id}:${accIdStr}:${w.start}`);
+        if (excessKeys.length > 0) {
+          excessSchedKeys.push(...excessKeys);
+        }
         for (const win of windowsToProcess) {
           const listIndex = currentPointer % pool.length;
           const selectedList = pool[listIndex];
@@ -84,8 +89,8 @@ export async function runTopNPhase(
     }
   }
 
-  // Mark ALL TopN schedule keys NOW before heavy work
-  const allTopNSchedKeys = topNJobs.flatMap((j) => j.schedKeys);
+  // Mark ALL TopN schedule keys NOW before heavy work (including excess windows)
+  const allTopNSchedKeys = [...topNJobs.flatMap((j) => j.schedKeys), ...excessSchedKeys];
   if (allTopNSchedKeys.length > 0) {
     await markScheduled(allTopNSchedKeys);
   }
