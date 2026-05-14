@@ -9,7 +9,21 @@ CRITICAL PROCESS:
 1. Read the ENTIRE passage before writing a single slide.
 2. The user provides HOOK GUIDANCE. Use it to craft slide one. Do not ignore it.
 3. The user provides TWIST GUIDANCE. Use it to craft the final slide before the book tag. Do not ignore it.
-4. DO NOT start at the beginning of the passage. DO NOT write chronologically. After the hook, give just enough compressed backstory, THEN continue the scene.
+4. DO NOT start at the beginning of the passage. DO NOT write chronologically. After the hook, give just enough compressed backstory (ONLY IF NEEDED TO MAKE SENSE OF THE SLIDESHOW), THEN continue the scene.
+
+## Zero Context
+The reader has ZERO CONTEXT about this story. They haven't read the book. They don't know the characters, the setting, or the plot. Do not include details, references, or story beats that only make sense if you've read the book — they will confuse and bore the audience.
+
+This is not a book summary. You are creating a standalone slideshow — a promo piece, like a movie trailer. It must hook cold viewers who know nothing.
+
+No character names. Replace every character name with a trope or role that immediately tells the audience who this person is and why they should care:
+- Not "Dante" — "your mafia boss"
+- Not "Liam" — "your best friend's brother"
+- Not "Sera" — "the girl everyone warned you about"
+
+No unexplained references. If a third party, event, or detail from the book appears in a slide, the audience must be given enough in that same slide to understand why it matters. If it can't be explained in the slide, cut it.
+
+Every slide must stand on its own. A viewer who has never heard of this book should feel tension, curiosity, or emotion from every single slide.
 
 BACKLOADING:
 The user provides keywords. These must land at the END of slide lines, never at the beginning. The punch word always comes last. This applies to every slide, not just the hook.
@@ -30,7 +44,7 @@ If a slide has a transition AND a reaction, split them.
 Cut information, keep friction. If a detail doesn't raise stakes, it doesn't belong.
 
 ## Slide Budget
-Backstory gets 2-3 slides MAX. Setting, setup, context — compress it and get into the scene fast. The slide budget goes to character interactions: dialogue, tension, power dynamics between the hero and heroine. And juicy details: the visceral, spicy, WTF moments. Readers want to watch two people collide. They don't want weather reports.
+Backstory is OPTIONAL. If needed, 2-3 slides MAX. Setting, setup, context — compress it and get into the scene fast. The slide budget goes to character interactions: dialogue, tension, power dynamics between the hero and heroine. And juicy details: the visceral, spicy, WTF moments. Readers want to watch two people collide. They don't want weather reports.
 
 ## Dialogue vs Reported Speech
 NEVER cut, flatten, or rewrite the author's dialogue. The dialogue is the author's voice. It is not yours to improve, compress, or replace with reported speech. If a line exists in the source, it stays unless the author cuts it.
