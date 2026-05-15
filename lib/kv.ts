@@ -108,6 +108,7 @@ export interface Book {
   imagePrompts: NamedItem[];
   captions: NamedItem[];
   slideshows: Slideshow[];
+  musicTrackIds?: string[];
 }
 
 // Migrate legacy book shape (slideshows had imagePrompt/caption inline)
@@ -143,6 +144,7 @@ export function migrateBook(raw: unknown): Book {
         imagePromptIds: s.imagePromptIds || [],
         captionIds: s.captionIds || [],
       })),
+      musicTrackIds: (raw as { musicTrackIds?: string[] }).musicTrackIds,
     };
   }
   const imagePrompts: NamedItem[] = [];

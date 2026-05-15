@@ -25,6 +25,12 @@ interface Book {
   imagePrompts: NamedItem[];
   captions: NamedItem[];
   slideshows: Slideshow[];
+  musicTrackIds?: string[];
+}
+
+interface MusicTrack {
+  id: string;
+  name: string;
 }
 
 function uid() {
@@ -36,9 +42,10 @@ export default function BooksPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"prompts" | "captions" | "slideshows">(
+  const [tab, setTab] = useState<"prompts" | "captions" | "slideshows" | "music">(
     "slideshows"
   );
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
   const [editingSlideshow, setEditingSlideshow] = useState<Slideshow | null>(
     null
   );
@@ -71,6 +78,10 @@ export default function BooksPage() {
 
   useEffect(() => {
     loadBooks();
+    fetch("/api/music-tracks")
+      .then((r) => r.json())
+      .then((d) => setMusicTracks(d.tracks || []))
+      .catch(() => {});
   }, [loadBooks]);
 
   const persist = useCallback(
@@ -442,6 +453,7 @@ export default function BooksPage() {
                         ["slideshows", "Slideshows"],
                         ["prompts", "Image prompts"],
                         ["captions", "Captions"],
+                        ["music", "Music"],
                       ] as const
                     ).map(([key, label]) => (
                       <button
@@ -599,6 +611,38 @@ export default function BooksPage() {
                           Import slide texts
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {tab === "music" && (
+                    <div>
+                      {musicTracks.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No music tracks uploaded yet. Add tracks on the main page first.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-xs text-gray-500 mb-3">Select tracks for this book. During automation, book-level tracks take priority over account-level tracks.</p>
+                          {musicTracks.map((t) => {
+                            const checked = activeBook.musicTrackIds?.includes(t.id) || false;
+                            return (
+                              <label key={t.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200/60 hover:border-gray-300 transition-colors cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    const current = activeBook.musicTrackIds || [];
+                                    const next = checked
+                                      ? current.filter((id) => id !== t.id)
+                                      : [...current, t.id];
+                                    updateBook(activeBook.id, (b) => ({ ...b, musicTrackIds: next }));
+                                  }}
+                                  className="accent-blue-500 w-4 h-4"
+                                />
+                                <span className="text-sm text-gray-900">{t.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
