@@ -1129,37 +1129,45 @@ export default function Home() {
             </div>
 
             {/* Library actions */}
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5 flex flex-wrap items-center gap-3">
-              <div className="text-sm text-gray-400 mr-auto">
-                Library:
-              </div>
-              <select
-                value=""
-                onChange={(e) => {
-                  const [bookId, slideshowId] = e.target.value.split("::");
-                  const b = books.find((x) => x.id === bookId);
-                  const s = b?.slideshows.find((x) => x.id === slideshowId);
-                  if (s && b) loadSlideshowIntoEditor(s, b);
-                }}
-                className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-              >
-                <option value="">Load from book…</option>
-                {books.map((b) => (
-                  <optgroup key={b.id} label={b.name}>
-                    {b.slideshows.map((s) => (
-                      <option key={s.id} value={`${b.id}::${s.id}`}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <button
-                onClick={saveDraftToBook}
-                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5 space-y-3">
+              <div className="text-sm text-gray-400">Library:</div>
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  value={selectedBookId || ""}
+                  onChange={(e) => setSelectedBookId(e.target.value || null)}
+                  className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                >
+                  <option value="">Select a book…</option>
+                  {books.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+                {selectedBookId && (() => {
+                  const book = books.find((b) => b.id === selectedBookId);
+                  if (!book || book.slideshows.length === 0) return <span className="text-xs text-gray-400">No slideshows</span>;
+                  return (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const s = book.slideshows.find((x) => x.id === e.target.value);
+                        if (s) loadSlideshowIntoEditor(s, book);
+                      }}
+                      className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                    >
+                      <option value="">Select a slideshow…</option>
+                      {book.slideshows.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  );
+                })()}
+                <button
+                  onClick={saveDraftToBook}
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors text-sm font-medium"
               >
                 Save to book
               </button>
+              </div>
             </div>
 
             {/* Image prompt */}
