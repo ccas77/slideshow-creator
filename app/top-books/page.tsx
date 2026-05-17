@@ -939,21 +939,21 @@ export default function TopBooksPage() {
                     <option value="">Choose an account...</option>
                     {accounts.length > 0 && (
                       <optgroup label="TikTok">
-                        {accounts.map((a) => (
+                        {[...accounts].sort((a, b) => a.username.localeCompare(b.username)).map((a) => (
                           <option key={`tk-${a.id}`} value={String(a.id)}>@{a.username}</option>
                         ))}
                       </optgroup>
                     )}
                     {igAccounts.length > 0 && (
                       <optgroup label="Instagram">
-                        {igAccounts.map((a) => (
+                        {[...igAccounts].sort((a, b) => a.username.localeCompare(b.username)).map((a) => (
                           <option key={`ig-${a.id}`} value={String(a.id)}>@{a.username}</option>
                         ))}
                       </optgroup>
                     )}
                     {fbAccounts.length > 0 && (
                       <optgroup label="Facebook">
-                        {fbAccounts.map((a) => (
+                        {[...fbAccounts].sort((a, b) => a.username.localeCompare(b.username)).map((a) => (
                           <option key={`fb-${a.id}`} value={String(a.id)}>@{a.username}</option>
                         ))}
                       </optgroup>
@@ -1432,7 +1432,7 @@ export default function TopBooksPage() {
                   <div>
                     <label className="text-xs text-gray-500 block mb-2">TikTok accounts</label>
                     <div className="space-y-2">
-                      {accounts.map((a) => (
+                      {[...accounts].sort((a, b) => a.username.localeCompare(b.username)).map((a) => (
                         <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700">
                           <input
                             type="checkbox"
@@ -1450,7 +1450,7 @@ export default function TopBooksPage() {
                   <div>
                     <label className="text-xs text-gray-500 block mb-2">Instagram accounts</label>
                     <div className="space-y-2">
-                      {igAccounts.map((a) => (
+                      {[...igAccounts].sort((a, b) => a.username.localeCompare(b.username)).map((a) => (
                         <label key={a.id} className="flex items-center gap-2 text-sm text-gray-700">
                           <input
                             type="checkbox"
