@@ -7,6 +7,7 @@ import HowItWorks from "@/components/HowItWorks";
 interface TikTokAccount {
   id: number;
   username: string;
+  platform?: "tiktok" | "instagram" | "facebook";
 }
 
 interface PostAnalytics {
@@ -64,11 +65,24 @@ export default function PostsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [accRes, postsRes] = await Promise.all([
-        fetch(`/api/post-tiktok`),
+      const [ttRes, igRes, fbRes, postsRes] = await Promise.all([
+        fetch(`/api/post-tiktok?platform=tiktok`),
+        fetch(`/api/post-tiktok?platform=instagram`),
+        fetch(`/api/post-tiktok?platform=facebook`),
         fetch(`/api/post-tiktok?action=posts`),
       ]);
-      if (accRes.ok) setAccounts((await accRes.json()).accounts || []);
+      const allAccounts: TikTokAccount[] = [];
+      for (const [res, plat] of [
+        [ttRes, "tiktok"],
+        [igRes, "instagram"],
+        [fbRes, "facebook"],
+      ] as const) {
+        if (res.ok) {
+          const arr: TikTokAccount[] = (await res.json()).accounts || [];
+          for (const a of arr) allAccounts.push({ ...a, platform: plat });
+        }
+      }
+      setAccounts(allAccounts);
       if (postsRes.ok) setPosts((await postsRes.json()).posts || []);
     } catch {}
     setLoading(false);
@@ -136,11 +150,21 @@ export default function PostsPage() {
             className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           >
             <option value="all">All accounts</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                @{a.username}
-              </option>
-            ))}
+            {(["tiktok", "instagram", "facebook"] as const).map((plat) => {
+              const platAccounts = accounts
+                .filter((a) => a.platform === plat)
+                .sort((a, b) => a.username.localeCompare(b.username));
+              if (platAccounts.length === 0) return null;
+              return (
+                <optgroup key={plat} label={plat === "tiktok" ? "TikTok" : plat === "instagram" ? "Instagram" : "Facebook"}>
+                  {platAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      @{a.username}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
           <select
             value={filterStatus}
