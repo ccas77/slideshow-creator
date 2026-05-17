@@ -980,14 +980,14 @@ export default function TopBooksPage() {
                         </span>
                         <span className="text-xs text-gray-400 ml-2">{platformLabel(config.platform)}</span>
                       </div>
-                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <label className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
                         <input
                           type="checkbox"
                           checked={config.enabled}
                           onChange={(e) => updateSelectedConfig({ enabled: e.target.checked })}
-                          className="accent-blue-500 rounded"
+                          className="accent-blue-500 w-5 h-5"
                         />
-                        Enabled
+                        <span className="text-sm font-medium text-gray-900">Enable automation for this account</span>
                       </label>
                     </div>
 
