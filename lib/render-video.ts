@@ -25,13 +25,15 @@ export async function renderVideo(
   slides: Buffer[],
   options?: {
     durationPerSlide?: number;
+    durations?: number[]; // per-slide durations (overrides durationPerSlide for that index)
     transitionDuration?: number;
     audioBuffer?: Buffer;
+    backgroundImage?: Buffer; // raw background PNG — if provided, slides are treated as text overlays and background gets camera motion
   }
 ): Promise<Buffer> {
-  const durationPerSlide = options?.durationPerSlide ?? 4;
   const startMs = Date.now();
   let outputSize = 0;
+  const durationPerSlide = options?.durationPerSlide ?? 4;
 
   if (slides.length === 0) throw new Error("No slides to render");
 
@@ -44,7 +46,8 @@ export async function renderVideo(
       await writeFile(join(workDir, `slide-${String(i).padStart(3, "0")}.png`), slides[i]);
     }
 
-    const totalDuration = slides.length * durationPerSlide;
+    const getDuration = (i: number) => options?.durations?.[i] ?? durationPerSlide;
+    const totalDuration = slides.reduce((sum, _, i) => sum + getDuration(i), 0);
 
     let audioPath: string | null = null;
     if (options?.audioBuffer) {
@@ -56,21 +59,54 @@ export async function renderVideo(
     const outputPath = join(workDir, "output.mp4");
     const videoTarget = audioPath ? silentVideoPath : outputPath;
 
-    // Step 1: Convert each slide into a short mp4 clip with fade in/out
+    // Write background image if provided (for camera motion effect)
+    let bgPath: string | null = null;
+    if (options?.backgroundImage) {
+      bgPath = join(workDir, "bg.png");
+      await writeFile(bgPath, options.backgroundImage);
+    }
+
+    // Step 1: Convert each slide into a short mp4 clip
     const concatList: string[] = [];
     for (let i = 0; i < slides.length; i++) {
       const clipPath = join(workDir, `clip-${i}.mp4`);
-      await execFileAsync(ffmpegPath, [
-        "-y",
-        "-loop", "1",
-        "-i", join(workDir, `slide-${String(i).padStart(3, "0")}.png`),
-        "-t", String(durationPerSlide),
-        "-vf", `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2`,
-        "-c:v", "libx264", "-preset", "ultrafast",
-        "-pix_fmt", "yuv420p",
-        "-r", "24",
-        clipPath,
-      ], { timeout: 60000, maxBuffer: MAX_BUF });
+      const slidePath = join(workDir, `slide-${String(i).padStart(3, "0")}.png`);
+      const dur = getDuration(i);
+
+      if (bgPath) {
+        // Layered: moving background + static text overlay
+        await execFileAsync(ffmpegPath, [
+          "-y",
+          "-loop", "1",
+          "-i", bgPath,
+          "-loop", "1",
+          "-i", slidePath,
+          "-t", String(dur),
+          "-filter_complex", [
+            `[0:v]scale=1120:1992:force_original_aspect_ratio=increase,crop=1120:1992,crop=1080:1920:20+10*sin(2*PI*t/${Math.max(dur, 2)}):36+18*sin(2*PI*t/${Math.max(dur, 2)}+1.2)[bg]`,
+            `[1:v]scale=1080:1920[txt]`,
+            `[bg][txt]overlay=0:0[out]`,
+          ].join(";"),
+          "-map", "[out]",
+          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
+          "-pix_fmt", "yuv420p",
+          "-r", "24",
+          clipPath,
+        ], { timeout: 60000, maxBuffer: MAX_BUF });
+      } else {
+        // Standard: single composited slide (no motion)
+        await execFileAsync(ffmpegPath, [
+          "-y",
+          "-loop", "1",
+          "-i", slidePath,
+          "-t", String(dur),
+          "-vf", `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2`,
+          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
+          "-pix_fmt", "yuv420p",
+          "-r", "24",
+          clipPath,
+        ], { timeout: 60000, maxBuffer: MAX_BUF });
+      }
 
       concatList.push(`file '${clipPath}'`);
     }
@@ -110,8 +146,10 @@ export async function renderVideo(
     outputSize = result.length;
     return result;
   } finally {
-    const elapsedMs = Date.now() - startMs;
-    console.log(`[render-video] ffmpeg done frames=${slides.length} hasAudio=${!!options?.audioBuffer} sizeMB=${(outputSize / 1048576).toFixed(1)} elapsedMs=${elapsedMs}`);
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
+    const elapsedMs = Date.now() - startMs;
+    console.log(
+      `[render-video] ffmpeg done frames=${slides.length} hasAudio=${!!options?.audioBuffer} sizeMB=${(outputSize / 1048576).toFixed(1)} elapsedMs=${elapsedMs}`
+    );
   }
 }

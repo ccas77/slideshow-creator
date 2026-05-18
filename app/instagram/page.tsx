@@ -69,7 +69,7 @@ interface TikTokAccount {
   platform?: string;
 }
 
-type Tab = "slideshows" | "import" | "automation";
+type Tab = "slideshows" | "import" | "automation" | "overview";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -326,6 +326,7 @@ export default function InstagramPage() {
     { key: "slideshows", label: `Slideshows (${igSlideshows.length})` },
     { key: "import", label: "Import" },
     { key: "automation", label: (() => { const count = Object.values(autoConfig.accounts).filter((c) => c.enabled).length; return count > 0 ? `Automation (${count})` : "Automation"; })() },
+    { key: "overview", label: "Overview" },
   ];
 
   return (
@@ -1039,6 +1040,49 @@ export default function InstagramPage() {
                   {autoSaved && <span className="text-xs text-green-500">Saved</span>}
                 </div>
               </div>
+              );
+            })()}
+
+            {/* ═══ Overview Tab ═══ */}
+            {tab === "overview" && (() => {
+              const allAccs = [...igAccounts.map((a) => ({ ...a, platform: "instagram" as const })), ...accounts.map((a) => ({ ...a, platform: "tiktok" as const }))];
+              const enabledCarousel = Object.entries(autoConfig.accounts).filter(([, c]) => c.enabled);
+
+              return (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-6">
+                    <h2 className="text-lg font-semibold mb-1">Instagram Automation Overview</h2>
+                    <p className="text-sm text-gray-500 mb-6">
+                      {enabledCarousel.length} carousel account{enabledCarousel.length !== 1 ? "s" : ""}
+                    </p>
+
+                    {enabledCarousel.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-4">No accounts have automation enabled.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {enabledCarousel.map(([accId, cfg]) => {
+                          const acc = allAccs.find((a) => String(a.id) === accId);
+                          const bookNames = cfg.bookIds.length > 0
+                            ? cfg.bookIds.map((bid) => books.find((b) => b.id === bid)?.name || bid).join(", ")
+                            : "all books";
+                          const ssCount = cfg.slideshowIds.length > 0 ? cfg.slideshowIds.length : igSlideshows.filter((s) => cfg.bookIds.length === 0 || (s.sourceBookId && cfg.bookIds.includes(s.sourceBookId))).length;
+                          return (
+                            <div key={accId} className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-gray-900">@{acc?.username || accId}</span>
+                                <span className="text-[10px] uppercase tracking-wide text-gray-400">{acc?.platform}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">ON</span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {cfg.intervals.map((w) => `${w.start}–${w.end}`).join(", ") || "no windows"} · {bookNames} · {ssCount} slideshow{ssCount !== 1 ? "s" : ""} · ptr {cfg.pointer}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
               );
             })()}
           </>

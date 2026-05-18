@@ -96,11 +96,13 @@ export async function renderSlide(
   const fontSize = 36;
   const pSize = fontSize * 1024;
 
-  const strokeMarkup = `<span font_family="Inter" foreground="black" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
-  const strokePng = await sharp({
-    text: { text: strokeMarkup, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
+  // Black outline text — rendered and composited at offsets around the center
+  const outlineMarkup = `<span font_family="Inter" foreground="black" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
+  const outlinePng = await sharp({
+    text: { text: outlineMarkup, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
   }).png().toBuffer();
 
+  // White foreground text
   const textMarkup = `<span font_family="Inter" foreground="white" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
   const textPng = await sharp({
     text: { text: textMarkup, width: SLIDE_W - 80, align: "centre", rgba: true, dpi: 150 },
@@ -111,15 +113,95 @@ export async function renderSlide(
   const textH = textMeta.height || 0;
   const topOffset = Math.max(0, Math.round((SLIDE_H - textH) / 2));
   const leftOffset = Math.max(0, Math.round((SLIDE_W - textW) / 2));
-  const off = 3;
+
+  // Build outline by compositing black text at offsets in all directions
+  const outlineOffset = 3;
+  const outlineLayers: { input: Buffer; top: number; left: number }[] = [];
+  for (let dy = -outlineOffset; dy <= outlineOffset; dy++) {
+    for (let dx = -outlineOffset; dx <= outlineOffset; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      outlineLayers.push({
+        input: outlinePng,
+        top: topOffset + dy,
+        left: leftOffset + dx,
+      });
+    }
+  }
 
   return sharp(baseBuffer)
     .composite([
       { input: gradientPng },
-      { input: strokePng, top: topOffset - off, left: leftOffset },
-      { input: strokePng, top: topOffset + off, left: leftOffset },
-      { input: strokePng, top: topOffset, left: leftOffset - off },
-      { input: strokePng, top: topOffset, left: leftOffset + off },
+      ...outlineLayers,
+      { input: textPng, top: topOffset, left: leftOffset },
+    ])
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Renders just the text overlay (gradient + outlined text) on a transparent background.
+ * Used by renderVideo to composite text over a moving background.
+ */
+export async function renderTextOverlay(text: string): Promise<Buffer> {
+  ensureFonts();
+
+  const escaped = escapeMarkup(text);
+  const fontSize = 36;
+  const pSize = fontSize * 1024;
+
+  const textWidth = SLIDE_W - 200; // ~80% width for comfortable reading
+
+  // Black outline text
+  const outlineMarkup = `<span font_family="Inter" foreground="black" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
+  const outlinePng = await sharp({
+    text: { text: outlineMarkup, width: textWidth, align: "centre", rgba: true, dpi: 150 },
+  }).png().toBuffer();
+
+  // White foreground text
+  const textMarkup = `<span font_family="Inter" foreground="white" font_weight="bold" font_size="${pSize}">${escaped}</span>`;
+  const textPng = await sharp({
+    text: { text: textMarkup, width: textWidth, align: "centre", rgba: true, dpi: 150 },
+  }).png().toBuffer();
+
+  const textMeta = await sharp(textPng).metadata();
+  const textW = textMeta.width || textWidth;
+  const textH = textMeta.height || 0;
+  const topOffset = Math.max(0, Math.round((SLIDE_H - textH) / 2));
+  const leftOffset = Math.max(0, Math.round((SLIDE_W - textW) / 2));
+
+  const outlineOffset = 3;
+  const outlineLayers: { input: Buffer; top: number; left: number }[] = [];
+  for (let dy = -outlineOffset; dy <= outlineOffset; dy++) {
+    for (let dx = -outlineOffset; dx <= outlineOffset; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      outlineLayers.push({
+        input: outlinePng,
+        top: topOffset + dy,
+        left: leftOffset + dx,
+      });
+    }
+  }
+
+  // Gradient overlay
+  const gradientPng = await sharp(Buffer.from(gradientSvg()))
+    .resize(SLIDE_W, SLIDE_H)
+    .png()
+    .toBuffer();
+
+  // Transparent base
+  const transparent = await sharp({
+    create: {
+      width: SLIDE_W,
+      height: SLIDE_H,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).png().toBuffer();
+
+  return sharp(transparent)
+    .composite([
+      { input: gradientPng },
+      ...outlineLayers,
       { input: textPng, top: topOffset, left: leftOffset },
     ])
     .png()

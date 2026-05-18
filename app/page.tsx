@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import AppHeader from "@/components/AppHeader";
 import HowItWorks from "@/components/HowItWorks";
+import OverviewTab from "@/components/home/OverviewTab";
 
 interface TikTokAccount {
   id: number;
@@ -244,7 +245,7 @@ function renderSlideToCanvas(
   });
 }
 
-type Tab = "automation" | "post-now";
+type Tab = "automation" | "post-now" | "overview";
 
 export default function Home() {
   const [hydrated, setHydrated] = useState(false);
@@ -718,7 +719,7 @@ export default function Home() {
         </HowItWorks>
         {/* Tab switcher */}
         <div className="flex gap-1 p-1 rounded-xl bg-gray-100 border border-gray-200/60 mb-8">
-          {([["automation", "Automation"], ["post-now", "Post Now"]] as const).map(([key, label]) => (
+          {([["automation", "Automation"], ["post-now", "Post Now"], ["overview", "Overview"]] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -1098,6 +1099,11 @@ export default function Home() {
               )}
             </div>
           </section>
+        )}
+
+        {/* ============ TAB: Overview ============ */}
+        {tab === "overview" && (
+          <OverviewTab accounts={accounts} books={books} />
         )}
 
         {/* ============ TAB: Post Now ============ */}

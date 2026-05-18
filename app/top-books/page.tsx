@@ -125,7 +125,7 @@ export default function TopBooksPage() {
   const [generatingVideoForList, setGeneratingVideoForList] = useState<string | null>(null);
 
   // Active tab
-  const [tab, setTab] = useState<"books" | "lists" | "music" | "automation">("books");
+  const [tab, setTab] = useState<"books" | "lists" | "music" | "automation" | "overview">("books");
 
   const headers = useCallback(() => {
     return { "Content-Type": "application/json" };
@@ -664,7 +664,7 @@ export default function TopBooksPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">
-          {(["books", "lists", "music", "automation"] as const).map((t) => (
+          {(["books", "lists", "music", "automation", "overview"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -672,7 +672,7 @@ export default function TopBooksPage() {
                 tab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
               }`}
             >
-              {t === "books" ? `Books (${books.length})` : t === "lists" ? `Lists (${lists.length})` : t === "music" ? `Music (${musicTracks.length})` : `Automation (${configuredCount})`}
+              {t === "books" ? `Books (${books.length})` : t === "lists" ? `Lists (${lists.length})` : t === "music" ? `Music (${musicTracks.length})` : t === "overview" ? "Overview" : `Automation (${configuredCount})`}
             </button>
           ))}
         </div>
@@ -1238,6 +1238,52 @@ export default function TopBooksPage() {
                 </div>
               )}
             </>
+          );
+        })()}
+
+        {/* ═══ OVERVIEW TAB ═══ */}
+        {tab === "overview" && (() => {
+          const allAccts = [
+            ...accounts.map((a) => ({ ...a, platform: "tiktok" as const })),
+            ...igAccounts.map((a) => ({ ...a, platform: "instagram" as const })),
+            ...fbAccounts.map((a) => ({ ...a, platform: "facebook" as const })),
+          ].sort((a, b) => a.username.localeCompare(b.username));
+
+          const enabled = Object.entries(topnAutoConfig.accounts).filter(([, c]) => c.enabled);
+
+          return (
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-6">
+                <h2 className="text-lg font-semibold mb-1">Top Books Automation Overview</h2>
+                <p className="text-sm text-gray-500 mb-6">
+                  {enabled.length} active account{enabled.length !== 1 ? "s" : ""}
+                </p>
+
+                {enabled.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">No accounts have automation enabled.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {enabled.map(([accId, cfg]) => {
+                      const acc = allAccts.find((a) => String(a.id) === accId);
+                      const listCount = cfg.listIds.length > 0 ? cfg.listIds.length : lists.length;
+                      const pLabel = (() => { switch(cfg.platform) { case "tiktok-carousel": return "TikTok Carousel"; case "tiktok-video": return "TikTok Video"; case "fb-video": return "FB Video"; case "ig-carousel": return "IG Carousel"; case "ig-video": return "IG Video"; default: return cfg.platform; } })();
+                      return (
+                        <div key={accId} className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium text-gray-900">@{acc?.username || accId}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">{pLabel}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">ON</span>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {cfg.intervals.map((w) => `${w.start}–${w.end}`).join(", ") || "no windows"} · every {cfg.frequencyDays}d · {listCount} list{listCount !== 1 ? "s" : ""} · ptr {cfg.pointer}{cfg.lastPostDate ? ` · last ${cfg.lastPostDate}` : ""}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           );
         })()}
 
