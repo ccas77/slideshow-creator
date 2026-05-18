@@ -854,12 +854,31 @@ export default function InstagramPage() {
 
               return (
               <div className="space-y-4">
-                {/* Summary */}
-                <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
-                  <p className="text-xs text-gray-500">
-                    {configuredCount} account{configuredCount !== 1 ? "s" : ""} enabled. Each account round-robins through its assigned slideshows.
-                  </p>
+                {/* Detailed summary */}
+                {configuredCount > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Active Carousel Automations</h3>
+                  {Object.entries(autoConfig.accounts).filter(([, c]) => c.enabled).map(([accId, cfg]) => {
+                    const acc = allAccs.find((a) => String(a.id) === accId);
+                    const bookNames = cfg.bookIds.length > 0
+                      ? cfg.bookIds.map((bid) => books.find((b) => b.id === bid)?.name || bid).join(", ")
+                      : "all books";
+                    const ssCount = cfg.slideshowIds.length > 0 ? cfg.slideshowIds.length : igSlideshows.filter((s) => cfg.bookIds.length === 0 || (s.sourceBookId && cfg.bookIds.includes(s.sourceBookId))).length;
+                    return (
+                      <div key={accId} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium text-gray-900">@{acc?.username || accId}</span>
+                          <span className="text-[10px] uppercase tracking-wide text-gray-400">{acc?.platform}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 space-y-0.5">
+                          <div>Windows: {cfg.intervals.map((w) => `${w.start}–${w.end}`).join(", ") || "none"}</div>
+                          <div>Books: {bookNames} · {ssCount} slideshow{ssCount !== 1 ? "s" : ""} · pointer {cfg.pointer}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+                )}
 
                 {/* Account selector */}
                 <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">

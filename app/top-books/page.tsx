@@ -924,11 +924,29 @@ export default function TopBooksPage() {
           const selSource = allAutoAccounts.find((a) => a.id === selectedTopnAccount)?.source || "accounts";
           return (
             <>
-              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 mb-4">
-                <p className="text-sm text-gray-500 mb-4">
-                  {configuredCount} account{configuredCount !== 1 ? "s" : ""} configured for auto-posting
-                </p>
+              {configuredCount > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 mb-4 space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Active Top N Automations</h3>
+                {Object.entries(topnAutoConfig.accounts).filter(([, c]) => c.enabled).map(([accId, cfg]) => {
+                  const acc = allAutoAccounts.find((a) => a.id === accId);
+                  const listCount = cfg.listIds.length > 0 ? cfg.listIds.length : lists.length;
+                  return (
+                    <div key={accId} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-medium text-gray-900">@{acc?.username || accId}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">{platformLabel(cfg.platform)}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 space-y-0.5">
+                        <div>Windows: {cfg.intervals.map((w) => `${w.start}–${w.end}`).join(", ") || "none"} · every {cfg.frequencyDays} day{cfg.frequencyDays !== 1 ? "s" : ""}</div>
+                        <div>{listCount} list{listCount !== 1 ? "s" : ""} · pointer {cfg.pointer}{cfg.lastPostDate ? ` · last post ${cfg.lastPostDate}` : ""}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              )}
 
+              <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-5 mb-4">
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Select account</label>
                   <select
