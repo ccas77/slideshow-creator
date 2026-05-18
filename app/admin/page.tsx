@@ -18,10 +18,21 @@ interface SocialAccount {
   platform: string;
 }
 
+interface TimeWindow { start: string; end: string }
+
+interface UserAutomation {
+  userId: string;
+  email: string;
+  topn: { accounts: Record<string, { enabled: boolean; intervals: TimeWindow[]; listIds: string[]; pointer: number; frequencyDays: number; lastPostDate?: string; platform: string }> };
+  ig: { accounts: Record<string, { enabled: boolean; intervals: TimeWindow[]; bookIds: string[]; slideshowIds: string[]; pointer: number }> };
+}
+
 export default function AdminPage() {
   const [users, setUsers] = useState<PublicUser[]>([]);
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [autoData, setAutoData] = useState<UserAutomation[]>([]);
+  const [autoLoading, setAutoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "user">("user");
@@ -60,6 +71,18 @@ export default function AdminPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function loadAutomations() {
+    setAutoLoading(true);
+    try {
+      const res = await fetch("/api/admin/automations");
+      if (res.ok) {
+        const d = await res.json();
+        setAutoData(d.users || []);
+      }
+    } catch { /* ignore */ }
+    setAutoLoading(false);
+  }
 
   async function addUser(e: React.FormEvent) {
     e.preventDefault();
@@ -274,6 +297,86 @@ export default function AdminPage() {
                 );
               })}
             </ul>
+          )}
+        </section>
+
+        {/* AUTOMATIONS SECTION */}
+        <section className="bg-white border border-gray-200/60 rounded-2xl shadow-sm p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">All Automations</h2>
+            <button
+              onClick={loadAutomations}
+              disabled={autoLoading}
+              className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 shadow-sm"
+            >
+              {autoLoading ? "Loading..." : autoData.length > 0 ? "Refresh" : "Load"}
+            </button>
+          </div>
+          {autoData.length > 0 ? (
+            <div className="space-y-5">
+              {autoData.map((u) => {
+                const topnEntries = Object.entries(u.topn.accounts || {});
+                const igEntries = Object.entries(u.ig.accounts || {});
+                if (topnEntries.length === 0 && igEntries.length === 0) return null;
+                return (
+                  <div key={u.userId} className="border border-gray-200 rounded-xl p-4">
+                    <div className="text-sm font-semibold text-gray-900 mb-3">{u.email}</div>
+                    {topnEntries.length > 0 && (
+                      <div className="mb-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-amber-600 mb-2">Top N</div>
+                        <div className="space-y-2">
+                          {topnEntries.map(([accId, cfg]) => (
+                            <div key={accId} className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-mono text-gray-500">Acct {accId}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.enabled ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-500"}`}>
+                                  {cfg.enabled ? "ON" : "OFF"}
+                                </span>
+                                <span className="text-gray-400">ptr:{cfg.pointer}</span>
+                                <span className="text-gray-400">{cfg.platform}</span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Windows: {cfg.intervals.map((w, i) => <span key={i}>{w.start}-{w.end}{i < cfg.intervals.length - 1 ? ", " : ""}</span>)}
+                                {cfg.intervals.length === 0 && "none"}
+                                {" | "}Every {cfg.frequencyDays}d
+                                {cfg.lastPostDate && ` | Last: ${cfg.lastPostDate}`}
+                                {" | "}Lists: {cfg.listIds.length === 0 ? "all" : cfg.listIds.length}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {igEntries.length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-blue-600 mb-2">IG/Carousel</div>
+                        <div className="space-y-2">
+                          {igEntries.map(([accId, cfg]) => (
+                            <div key={accId} className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-mono text-gray-500">Acct {accId}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.enabled ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-500"}`}>
+                                  {cfg.enabled ? "ON" : "OFF"}
+                                </span>
+                                <span className="text-gray-400">ptr:{cfg.pointer}</span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Windows: {cfg.intervals.map((w, i) => <span key={i}>{w.start}-{w.end}{i < cfg.intervals.length - 1 ? ", " : ""}</span>)}
+                                {cfg.intervals.length === 0 && "none"}
+                                {" | "}Books: {cfg.bookIds.length === 0 ? "all" : cfg.bookIds.length}
+                                {" | "}Slideshows: {cfg.slideshowIds.length === 0 ? "all" : cfg.slideshowIds.length}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Click Load to view all user automations.</p>
           )}
         </section>
 
