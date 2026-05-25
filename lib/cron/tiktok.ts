@@ -281,16 +281,16 @@ export async function runTikTokPhase(
     }
   }
 
-  // Phase 2+3: Generate image, render slides, and post
+  // Phase 2+3: Generate image, render slides, and post — in parallel batches
+  const BATCH_SIZE = 8;
   const postResults: Array<{ job: Job; status: string; scheduledAt?: string; postId?: string }> = [];
 
-  for (const job of jobs) {
+  async function processJob(job: Job): Promise<{ job: Job; status: string; scheduledAt?: string; postId?: string }> {
     try {
       const imgResult = await generateImageWithInfo(job.imagePrompt);
       if (!imgResult.data) {
         debugLog.push(`${job.acc.username} (${job.acc.id}) ${job.win.start}: image gen failed — ${imgResult.error || "unknown"}`);
-        postResults.push({ job, status: `skipped: image generation failed — ${imgResult.error || "unknown"}` });
-        continue;
+        return { job, status: `skipped: image generation failed — ${imgResult.error || "unknown"}` };
       }
 
       const slideBufs: Buffer[] = [];
@@ -324,12 +324,6 @@ export async function runTikTokPhase(
 
       const postId = postResp.id || postResp.data?.id || "unknown";
       const postUrl = postResp.url || postResp.data?.url || "";
-      postResults.push({
-        job,
-        status: `scheduled ${job.slideTexts.length} slides for ${scheduledAt.toISOString()} (${job.source}) [post:${postId}]`,
-        scheduledAt: scheduledAt.toISOString(),
-        postId: String(postId),
-      });
 
       const now = new Date();
       await appendPostLog({
@@ -350,10 +344,26 @@ export async function runTikTokPhase(
         userId: job.userId,
         timestamp: now.toISOString(),
       }).catch(() => {});
+
+      return {
+        job,
+        status: `scheduled ${job.slideTexts.length} slides for ${scheduledAt.toISOString()} (${job.source}) [post:${postId}]`,
+        scheduledAt: scheduledAt.toISOString(),
+        postId: String(postId),
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       debugLog.push(`${job.acc.username} (${job.acc.id}) ${job.win.start}: job error — ${msg}`);
-      postResults.push({ job, status: `error: ${msg}` });
+      return { job, status: `error: ${msg}` };
+    }
+  }
+
+  for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
+    const batch = jobs.slice(i, i + BATCH_SIZE);
+    debugLog.push(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} jobs`);
+    const batchResults = await Promise.allSettled(batch.map(processJob));
+    for (const r of batchResults) {
+      postResults.push(r.status === "fulfilled" ? r.value : { job: batch[0], status: `error: ${r.reason}` });
     }
   }
 
