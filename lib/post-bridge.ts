@@ -104,6 +104,23 @@ export async function uploadPng(
   return upload.media_id;
 }
 
+export async function uploadImage(
+  buffer: Buffer,
+  name: string,
+  mimeType: "image/png" | "image/jpeg" = "image/png"
+): Promise<string> {
+  const upload = await pbFetch("/v1/media/create-upload-url", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      mime_type: mimeType,
+      size_bytes: buffer.length,
+    }),
+  });
+  await s3PutWithRetry(upload.upload_url, mimeType, buffer);
+  return upload.media_id;
+}
+
 export async function uploadVideo(
   buffer: Buffer,
   name: string
