@@ -8,8 +8,8 @@ import {
 } from "@/lib/kv";
 import { listUsers } from "@/lib/auth";
 import { generateImageWithInfo } from "@/lib/gemini";
-import { renderSlide } from "@/lib/render-slide";
-import { listTikTokAccounts, pbFetch, uploadPng, uploadImage } from "@/lib/post-bridge";
+import { renderSlide, renderCoverSlide } from "@/lib/render-slide";
+import { listTikTokAccounts, pbFetch, uploadPng } from "@/lib/post-bridge";
 import { shouldProcessWindow, randomTimeInWindow } from "./window";
 import { markScheduled, unmarkScheduled, getScheduledToday } from "./scheduled-today";
 import type { Job, CronAccountResult } from "./types";
@@ -304,12 +304,8 @@ export async function runTikTokPhase(
       }
 
       if (job.coverImage) {
-        const mimeMatch = job.coverImage.match(/^data:(image\/[^;]+);base64,/);
-        const mime = mimeMatch?.[1] === "image/jpeg" ? "image/jpeg" as const : "image/png" as const;
-        const ext = mime === "image/jpeg" ? "jpg" : "png";
-        const base64 = job.coverImage.replace(/^data:[^;]+;base64,/, "");
-        const coverBuf = Buffer.from(base64, "base64");
-        mediaIds.push(await uploadImage(coverBuf, `slide-${slideBufs.length + 1}-cover.${ext}`, mime));
+        const coverSlideBuf = await renderCoverSlide(imgResult.data, job.coverImage);
+        mediaIds.push(await uploadPng(coverSlideBuf, `slide-${slideBufs.length + 1}-cover.png`));
       }
 
       const scheduledAt = randomTimeInWindow(job.win.start, job.win.end);
@@ -488,11 +484,8 @@ export async function runTikTokPhase(
         mediaIds.push(await uploadPng(slideBufs[j], `slide-${j + 1}.png`));
       }
       if (book.coverImage) {
-        const mimeMatch = book.coverImage.match(/^data:(image\/[^;]+);base64,/);
-        const mime = mimeMatch?.[1] === "image/jpeg" ? "image/jpeg" as const : "image/png" as const;
-        const ext = mime === "image/jpeg" ? "jpg" : "png";
-        const b64 = book.coverImage.replace(/^data:[^;]+;base64,/, "");
-        mediaIds.push(await uploadImage(Buffer.from(b64, "base64"), `slide-cover.${ext}`, mime));
+        const coverSlideBuf = await renderCoverSlide(imgResult.data, book.coverImage);
+        mediaIds.push(await uploadPng(coverSlideBuf, `slide-cover.png`));
       }
 
       const scheduledAt = new Date(Date.now() + 5 * 60 * 1000);

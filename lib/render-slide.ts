@@ -139,6 +139,55 @@ export async function renderSlide(
 }
 
 /**
+ * Renders the book cover centered on the same AI background used for text slides.
+ */
+export async function renderCoverSlide(
+  bgImageDataUrl: string | null,
+  coverImageDataUrl: string
+): Promise<Buffer> {
+  ensureFonts();
+
+  let baseBuffer: Buffer;
+  if (bgImageDataUrl) {
+    const b64 = bgImageDataUrl.split(",")[1];
+    const imgBuf = Buffer.from(b64, "base64");
+    baseBuffer = await sharp(imgBuf)
+      .resize(SLIDE_W, SLIDE_H, { fit: "cover", position: "center" })
+      .png()
+      .toBuffer();
+  } else {
+    baseBuffer = await sharp({
+      create: { width: SLIDE_W, height: SLIDE_H, channels: 3, background: { r: 24, g: 24, b: 27 } },
+    }).png().toBuffer();
+  }
+
+  const gradientPng = await sharp(Buffer.from(gradientSvg()))
+    .resize(SLIDE_W, SLIDE_H)
+    .png()
+    .toBuffer();
+
+  const coverB64 = coverImageDataUrl.replace(/^data:[^;]+;base64,/, "");
+  const coverBuf = Buffer.from(coverB64, "base64");
+  const coverResized = await sharp(coverBuf)
+    .resize(750, 1100, { fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer();
+  const coverMeta = await sharp(coverResized).metadata();
+  const coverW = coverMeta.width || 750;
+  const coverH = coverMeta.height || 1100;
+  const coverLeft = Math.round((SLIDE_W - coverW) / 2);
+  const coverTop = Math.round((SLIDE_H - coverH) / 2);
+
+  return sharp(baseBuffer)
+    .composite([
+      { input: gradientPng },
+      { input: coverResized, top: coverTop, left: coverLeft },
+    ])
+    .png()
+    .toBuffer();
+}
+
+/**
  * Renders just the text overlay (gradient + outlined text) on a transparent background.
  * Used by renderVideo to composite text over a moving background.
  */
