@@ -2,7 +2,7 @@
 
 Multi-user SaaS for creating and auto-posting TikTok/Instagram slideshows from book quotes and excerpts. Users manage books, configure automated posting schedules per TikTok account, and generate "Top N" book list videos.
 
-Deployed at: [bookpulls.com](https://www.bookpulls.com)
+Deployed at: [bookpulls.com](https://www.bookpulls.com) (auto-deploys from `main`)
 
 ## Features
 
