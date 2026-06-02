@@ -95,9 +95,29 @@ export async function runTopNPhase(
     await markScheduled(allTopNSchedKeys);
   }
 
+  // EARLY SAVE: advance pointer + lastPostDate BEFORE heavy work, matching the
+  // TikTok pattern (May 7 incident fix). If the cron times out during the
+  // publishTopN loop below, the pointer advance still persists so the next day's
+  // cron rotates to a different list. Without this, pointers stayed stuck and
+  // every account posted the same list daily.
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  for (const topNJob of topNJobs) {
+    const entry = topNAutoByUser.get(topNJob.user.id);
+    if (!entry) continue;
+    entry.updated[topNJob.accIdStr] = {
+      ...topNJob.accConfig,
+      pointer: topNJob._finalPointer,
+      lastPostDate: todayUtc,
+    };
+  }
+  for (const [userId, { updated }] of topNAutoByUser) {
+    try {
+      await setTopNAutomation(userId, { accounts: updated });
+    } catch {}
+  }
+
   // Now do heavy work
   const failedTopNKeys: string[] = [];
-  const topnSuccessAccounts = new Set<string>(); // userId:accIdStr
   for (const topNJob of topNJobs) {
     for (const win of topNJob.activeWindows) {
       try {
@@ -115,7 +135,6 @@ export async function runTopNPhase(
           listName: topNJob.selectedList.name,
           status: `${topNJob.accIdStr}: scheduled ${r.slides} slides for ${scheduledAt.toISOString()} [post:${r.postId}]`,
         });
-        topnSuccessAccounts.add(`${topNJob.user.id}:${topNJob.accIdStr}`);
 
         const now = new Date();
         await appendPostLog({
@@ -149,28 +168,6 @@ export async function runTopNPhase(
   }
   if (failedTopNKeys.length > 0) {
     await unmarkScheduled(failedTopNKeys);
-  }
-
-  // Only advance pointer and lastPostDate for accounts with at least one success
-  for (const topNJob of topNJobs) {
-    const key = `${topNJob.user.id}:${topNJob.accIdStr}`;
-    if (topnSuccessAccounts.has(key)) {
-      const userId = topNJob.user.id;
-      if (!topNAutoByUser.has(userId)) continue;
-      const { updated } = topNAutoByUser.get(userId)!;
-      updated[topNJob.accIdStr] = {
-        ...topNJob.accConfig,
-        pointer: topNJob._finalPointer,
-        lastPostDate: new Date().toISOString().slice(0, 10),
-      };
-    }
-  }
-
-  // Save updated pointers
-  for (const [userId, { updated }] of topNAutoByUser) {
-    try {
-      await setTopNAutomation(userId, { accounts: updated });
-    } catch {}
   }
 
   return { topNResults };
