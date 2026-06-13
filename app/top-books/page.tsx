@@ -97,6 +97,10 @@ export default function TopBooksPage() {
   const [listMusicTrackIds, setListMusicTrackIds] = useState<string[]>([]);
   const [listGenres, setListGenres] = useState<string[]>([]);
 
+  // BookTok AI generation
+  const [generatingBookTok, setGeneratingBookTok] = useState(false);
+  const [bookTokError, setBookTokError] = useState<string | null>(null);
+
   // Publish
   const [publishListId, setPublishListId] = useState<string | null>(null);
   const [publishAccounts, setPublishAccounts] = useState<number[]>([]);
@@ -362,6 +366,7 @@ export default function TopBooksPage() {
       setListBgPrompts("");
       setListMusicTrackIds([]);
     }
+    setBookTokError(null);
     setShowListForm(true);
   }
 
@@ -398,6 +403,68 @@ export default function TopBooksPage() {
     });
     setShowListForm(false);
     await load();
+  }
+
+  async function generateBookTokContent() {
+    const name = listName.trim();
+    if (!name) {
+      setBookTokError("Add a list name first.");
+      return;
+    }
+    setBookTokError(null);
+    setGeneratingBookTok(true);
+    try {
+      const existingTitles = listTitles.split("\n").map((s) => s.trim()).filter(Boolean);
+      const existingCaptions = listCaptions.split("\n\n").map((s) => s.trim()).filter(Boolean);
+      const existingImagePrompts = listBgPrompts.split("\n").map((s) => s.trim()).filter(Boolean);
+      const res = await fetch("/api/topn-booktok", {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          listName: name,
+          genre: listGenres.join(", "),
+          existingTitles,
+          existingCaptions,
+          existingImagePrompts,
+          quantity: 18,
+          inHookBookCount: listCount,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Request failed (${res.status})`);
+      }
+      const data = await res.json();
+      const newTitles: string[] = Array.isArray(data.titles) ? data.titles : [];
+      const newCaptions: string[] = Array.isArray(data.captions) ? data.captions : [];
+      const newImagePrompts: string[] = Array.isArray(data.imagePrompts) ? data.imagePrompts : [];
+
+      if (newTitles.length) {
+        setListTitles((prev) => {
+          const base = prev.replace(/\s+$/, "");
+          const joined = newTitles.join("\n");
+          return base ? `${base}\n${joined}` : joined;
+        });
+      }
+      if (newCaptions.length) {
+        setListCaptions((prev) => {
+          const base = prev.replace(/\s+$/, "");
+          const joined = newCaptions.join("\n\n");
+          return base ? `${base}\n\n${joined}` : joined;
+        });
+      }
+      if (newImagePrompts.length) {
+        setListBgPrompts((prev) => {
+          const base = prev.replace(/\s+$/, "");
+          const joined = newImagePrompts.join("\n");
+          return base ? `${base}\n${joined}` : joined;
+        });
+      }
+    } catch (err) {
+      setBookTokError(err instanceof Error ? err.message : "Generation failed.");
+    } finally {
+      setGeneratingBookTok(false);
+    }
   }
 
   async function deleteList(id: string) {
@@ -1352,6 +1419,27 @@ export default function TopBooksPage() {
               <div>
                 <label className="text-xs text-gray-500 block mb-1">List Name *</label>
                 <input value={listName} onChange={(e) => setListName(e.target.value)} placeholder="e.g. Dark Romance" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500" />
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="text-sm text-gray-900 font-medium">Generate hooks, captions and image prompts</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">
+                      Uses the list name {listGenres.length ? `and genres (${listGenres.join(", ")})` : "(set genres below for sharper results)"}. Appends to the three fields below. Click again later for more, no repeats.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={generateBookTokContent}
+                    disabled={generatingBookTok || !listName.trim()}
+                    className="shrink-0 px-3 py-2 rounded-xl text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {generatingBookTok ? "Generating…" : "Generate"}
+                  </button>
+                </div>
+                {bookTokError && (
+                  <div className="mt-2 text-[12px] text-red-600">{bookTokError}</div>
+                )}
               </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Title Slide Texts * (one per line, random pick each publish)</label>

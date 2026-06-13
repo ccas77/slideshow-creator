@@ -129,7 +129,11 @@ lib/
 **Optional:**
 | Variable | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY` | Anthropic Claude API for slide text generation |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API for slide text generation and top-N BookTok generator |
+
+## Top-N BookTok generator
+
+In the Top Books page → Lists tab, the list editor modal has a "Generate" button between the List Name and Title Slide Texts fields. It calls `app/api/topn-booktok/route.ts` (session-auth), which sends the list name, the selected genres, and the current contents of the three pools (titles, captions, background image prompts) to Claude Sonnet 4.6 and appends 16-20 new items to each textarea. Repeat clicks pass the current pools so the model skips duplicates; a hard dedup runs server-side as a safety net. The list name overrides genre when they disagree (e.g. "Books like Harry Potter" + "YA fantasy" produces Harry-Potter-likes, not generic YA fantasy). System prompt + genre notes live in `lib/booktok-prompt.ts` and use ephemeral prompt caching so repeat calls are cheap.
 
 ## Running Locally
 
