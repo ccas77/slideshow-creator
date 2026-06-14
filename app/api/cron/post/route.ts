@@ -4,8 +4,28 @@ import { getScheduledToday } from "@/lib/cron/scheduled-today";
 import { runTikTokPhase } from "@/lib/cron/tiktok";
 import { runTopNPhase } from "@/lib/cron/topn";
 import { runInstagramPhase } from "@/lib/cron/instagram";
+import { checkStuckRotations } from "@/lib/cron/stuck-detector";
+import { notify } from "@/lib/notify";
 
 export const maxDuration = 800; // Pro max
+
+async function runPhase<T>(
+  name: string,
+  fn: () => Promise<T>
+): Promise<T | { error: string }> {
+  try {
+    return await fn();
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.message}\n\n${err.stack || ""}` : String(err);
+    await notify({
+      subject: `BookPulls Creator: cron phase "${name}" crashed`,
+      body: `Phase ${name} threw an unhandled error during the cron run.\n\n${msg}`,
+      dedupeKey: `phase-crash:${name}`,
+      cooldownSec: 3600,
+    });
+    return { error: msg };
+  }
+}
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -29,29 +49,50 @@ export async function GET(req: NextRequest) {
 
     let cronResult;
     try {
+      // Stuck-rotation detector runs first, off the previous two days of
+      // post-log. Failure to detect is non-fatal; never let it kill the cron.
+      checkStuckRotations().catch((err) => {
+        console.error("stuck-detector failed", err);
+      });
+
       const scheduledToday = await getScheduledToday();
 
-      // Phase 1-4: TikTok slideshow automation
-      const { results, debugLog } = await runTikTokPhase(scheduledToday, { dryRun, forceHour });
+      const tikTok = await runPhase("tiktok", () => runTikTokPhase(scheduledToday, { dryRun, forceHour }));
 
       if (dryRun) {
-        return NextResponse.json({ ok: true, dryRun: true, results, debugLog });
+        const tikTokResults = "error" in tikTok ? [] : tikTok.results;
+        const debugLog = "error" in tikTok ? [`tiktok phase crashed: ${tikTok.error}`] : tikTok.debugLog;
+        return NextResponse.json({ ok: true, dryRun: true, results: tikTokResults, debugLog });
       }
 
-      // Phase 5: Top N list automation
-      const { topNResults } = await runTopNPhase(scheduledToday, { forceHour });
+      const topN = await runPhase("topn", () => runTopNPhase(scheduledToday, { forceHour }));
+      const ig = await runPhase("instagram", () => runInstagramPhase(scheduledToday, { forceHour }));
 
-      // Phase 6: IG slideshow automation
-      const { igAutoResults } = await runInstagramPhase(scheduledToday, { forceHour });
+      const tikTokResults = "error" in tikTok ? [] : tikTok.results;
+      const debugLog = "error" in tikTok ? [`tiktok phase crashed: ${tikTok.error}`] : tikTok.debugLog;
+      const topNResults = "error" in topN ? [] : topN.topNResults;
+      const igAutoResults = "error" in ig ? [] : ig.igAutoResults;
 
-      cronResult = NextResponse.json({ ok: true, results, topNResults, igAutoResults, debugLog });
+      cronResult = NextResponse.json({
+        ok: true,
+        results: tikTokResults,
+        topNResults,
+        igAutoResults,
+        debugLog,
+      });
     } finally {
       await releaseLock();
     }
 
     return cronResult;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = err instanceof Error ? `${err.message}\n\n${err.stack || ""}` : String(err);
+    await notify({
+      subject: "BookPulls Creator: cron run crashed",
+      body: `The cron run threw before completing.\n\n${msg}`,
+      dedupeKey: "cron-crash",
+      cooldownSec: 1800,
+    });
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

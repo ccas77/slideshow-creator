@@ -8,6 +8,7 @@ import { listUsers } from "@/lib/auth";
 import { publishTopN } from "@/lib/topn-publisher";
 import { shouldProcessWindow, randomTimeInWindow } from "./window";
 import { markScheduled, unmarkScheduled } from "./scheduled-today";
+import { notify } from "@/lib/notify";
 import type { TopNResult } from "./types";
 
 export async function runTopNPhase(
@@ -86,6 +87,12 @@ export async function runTopNPhase(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       topNResults.push({ userId: user.id, listName: "(topn-auto)", status: `error: ${msg}` });
+      await notify({
+        subject: `BookPulls Creator: TopN build failed for user ${user.id}`,
+        body: `User: ${user.id}\nFailed during TopN job build (before publishing).\n\n${msg}`,
+        dedupeKey: `topn-build-fail:${user.id}:${new Date().toISOString().slice(0, 13)}`,
+        cooldownSec: 3600,
+      });
     }
   }
 
@@ -163,6 +170,12 @@ export async function runTopNPhase(
           status: `error (${topNJob.accIdStr}): ${msg}`,
         });
         failedTopNKeys.push(`topn:${topNJob.user.id}:${topNJob.accIdStr}:${win.start}`);
+        await notify({
+          subject: `BookPulls Creator: TopN post failed for account ${topNJob.accIdStr}`,
+          body: `User: ${topNJob.user.id}\nAccount: ${topNJob.accIdStr}\nList: ${topNJob.selectedList.name}\nWindow: ${win.start}-${win.end}\n\n${msg}`,
+          dedupeKey: `topn-fail:${topNJob.user.id}:${topNJob.accIdStr}:${new Date().toISOString().slice(0, 13)}`,
+          cooldownSec: 3600,
+        });
       }
     }
   }

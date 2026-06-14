@@ -130,6 +130,18 @@ lib/
 | Variable | Purpose |
 |---|---|
 | `ANTHROPIC_API_KEY` | Anthropic Claude API for slide text generation and top-N BookTok generator |
+| `RESEND_API_KEY` | Enables failure-notification emails. Without it, `notify()` no-ops silently and the cron behaves exactly as before. |
+| `NOTIFY_EMAIL` | Where failure emails go. Defaults to `cordeliacastel@gmail.com`. |
+| `NOTIFY_FROM` | From address. Defaults to `Slideshow Generator <onboarding@resend.dev>`. |
+
+## Failure notifications
+
+`lib/notify.ts` wraps Resend with a Redis-backed dedupe cooldown so the same failure doesn't email more than once per cooldown window (default 1h). It no-ops when `RESEND_API_KEY` is unset. Wired in:
+
+- `app/api/cron/post/route.ts` — top-level catch (cron crashed) + per-phase wrappers, so one phase crashing alerts but doesn't kill the other phases.
+- `lib/cron/{tiktok,topn,instagram}.ts` — per-post catches send "post failed for account X" emails (dedupe key includes accountId + the current hour). Per-user per-phase outer catch sends "phase X failed for user Y".
+- `lib/cron/stuck-detector.ts` — runs at the start of each cron, compares the previous two days of `post-log` (grouped by userId+accountId), and emails one summary if any account posted the same slideshow/list on both days. Dedupe key is per-day (cooldown 24h). Alarm for the 2026-05-07 (TikTok) and 2026-06-02 (TopN) class of stuck-pointer incidents.
+- `app/api/admin/test-notify` — POST (admin-only) sends a one-shot test email so you can confirm the path works without waiting for a real failure. Bypasses dedupe via per-call dedupeKey.
 
 ## Top-N BookTok generator
 

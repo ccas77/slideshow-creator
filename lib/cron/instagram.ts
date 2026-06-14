@@ -11,6 +11,7 @@ import { renderSlide } from "@/lib/render-slide";
 import { pbFetch, uploadPng } from "@/lib/post-bridge";
 import { shouldProcessWindow, randomTimeInWindow } from "./window";
 import { markScheduled } from "./scheduled-today";
+import { notify } from "@/lib/notify";
 import type { IgResult } from "./types";
 
 function pickRandom<T>(arr: T[]): T | null {
@@ -59,6 +60,12 @@ export async function runInstagramPhase(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       igAutoResults.push({ userId: user.id, status: `IG automation error: ${msg}` });
+      await notify({
+        subject: `BookPulls Creator: IG phase failed for user ${user.id}`,
+        body: `User: ${user.id}\nIG automation threw before completing.\n\n${msg}`,
+        dedupeKey: `ig-user-fail:${user.id}:${new Date().toISOString().slice(0, 13)}`,
+        cooldownSec: 3600,
+      });
     }
   }
 
@@ -161,6 +168,12 @@ export async function runInstagramPhase(
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             igAutoResults.push({ userId: user.id, status: `error (${accIdStr}): ${msg}` });
+            await notify({
+              subject: `BookPulls Creator: IG post failed for account ${accIdStr}`,
+              body: `User: ${user.id}\nAccount: ${accIdStr}\nSlideshow: ${ss.name}\nWindow: ${win.start}-${win.end}\n\n${msg}`,
+              dedupeKey: `ig-fail:${user.id}:${accIdStr}:${new Date().toISOString().slice(0, 13)}`,
+              cooldownSec: 3600,
+            });
           }
 
           pointer++;
@@ -176,6 +189,12 @@ export async function runInstagramPhase(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       igAutoResults.push({ userId: user.id, status: `IG automation error: ${msg}` });
+      await notify({
+        subject: `BookPulls Creator: IG phase failed for user ${user.id}`,
+        body: `User: ${user.id}\nIG automation threw before completing.\n\n${msg}`,
+        dedupeKey: `ig-user-fail:${user.id}:${new Date().toISOString().slice(0, 13)}`,
+        cooldownSec: 3600,
+      });
     }
   }
 
