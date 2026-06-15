@@ -107,20 +107,42 @@ export async function runTopNPhase(
   // publishTopN loop below, the pointer advance still persists so the next day's
   // cron rotates to a different list. Without this, pointers stayed stuck and
   // every account posted the same list daily.
+  // The +1 bump on top of the per-window advance prevents pointer cycling back
+  // to the same start position when windowsPerDay is a multiple of pool size
+  // (the 2026-05-07 incident class). Use a map so multi-window accounts only
+  // get +1 once, not per window.
   const todayUtc = new Date().toISOString().slice(0, 10);
+  const finalPointerByAccount = new Map<string, number>();
+  for (const topNJob of topNJobs) {
+    const key = `${topNJob.user.id}:${topNJob.accIdStr}`;
+    const current = finalPointerByAccount.get(key) ?? -Infinity;
+    if (topNJob._finalPointer > current) {
+      finalPointerByAccount.set(key, topNJob._finalPointer);
+    }
+  }
   for (const topNJob of topNJobs) {
     const entry = topNAutoByUser.get(topNJob.user.id);
     if (!entry) continue;
+    const key = `${topNJob.user.id}:${topNJob.accIdStr}`;
+    const finalPointer = finalPointerByAccount.get(key) ?? topNJob._finalPointer;
     entry.updated[topNJob.accIdStr] = {
       ...topNJob.accConfig,
-      pointer: topNJob._finalPointer,
+      pointer: finalPointer + 1,
       lastPostDate: todayUtc,
     };
   }
   for (const [userId, { updated }] of topNAutoByUser) {
     try {
       await setTopNAutomation(userId, { accounts: updated });
-    } catch {}
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await notify({
+        subject: `BookPulls Creator: TopN early pointer save failed for user ${userId}`,
+        body: `setTopNAutomation threw during the early save for user ${userId}. Pointer may not advance for today; tomorrow's cron may repeat today's lists for this user's accounts.\n\n${msg}`,
+        dedupeKey: `topn-early-save-fail:${userId}`,
+        cooldownSec: 3600,
+      });
+    }
   }
 
   // Now do heavy work
