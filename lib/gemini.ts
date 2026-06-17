@@ -1,26 +1,45 @@
 import { GoogleGenAI } from "@google/genai";
+import {
+  generateImage as gatewayGenerateImage,
+  generateImageWithInfo as gatewayGenerateImageWithInfo,
+  type ImageResult as GatewayImageResult,
+} from "@/lib/image-gen";
+
+// Image generation now goes through Vercel AI Gateway with cross-provider
+// failover (Gemini -> Imagen -> DALL-E). When Gateway is unreachable, this
+// module falls back to the direct Gemini SDK so existing behavior holds.
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
-const IMAGE_MODELS = [
+const DIRECT_FALLBACK_MODELS = [
   "gemini-2.5-flash-image",
   "gemini-3.1-flash-image-preview",
   "gemini-3-pro-image-preview",
 ];
 
-export type ImageResult = {
-  data: string | null;
-  error?: string;
-};
+export type ImageResult = GatewayImageResult;
 
 export async function generateImage(prompt: string): Promise<string | null> {
-  const result = await generateImageWithInfo(prompt);
-  return result.data;
+  const gateway = await gatewayGenerateImage(prompt).catch(() => null);
+  if (gateway) return gateway;
+  const direct = await directGenerateImageWithInfo(prompt);
+  return direct.data;
 }
 
 export async function generateImageWithInfo(prompt: string): Promise<ImageResult> {
+  const gateway = await gatewayGenerateImageWithInfo(prompt).catch(() => null);
+  if (gateway && gateway.data) return gateway;
+  const direct = await directGenerateImageWithInfo(prompt);
+  if (direct.data) return direct;
+  return {
+    data: null,
+    error: [gateway?.error, direct.error].filter(Boolean).join(" || "),
+  };
+}
+
+async function directGenerateImageWithInfo(prompt: string): Promise<ImageResult> {
   const errors: string[] = [];
-  for (const model of IMAGE_MODELS) {
+  for (const model of DIRECT_FALLBACK_MODELS) {
     try {
       const response = await ai.models.generateContent({
         model,
@@ -30,14 +49,17 @@ export async function generateImageWithInfo(prompt: string): Promise<ImageResult
       if (response.candidates?.[0]?.content?.parts) {
         for (const part of response.candidates[0].content.parts) {
           if (part.inlineData?.data) {
-            return { data: `data:image/png;base64,${part.inlineData.data}` };
+            return {
+              data: `data:image/png;base64,${part.inlineData.data}`,
+              providerUsed: `direct:${model}`,
+            };
           }
         }
       }
-      errors.push(`${model}: no image in response`);
+      errors.push(`direct:${model}: no image in response`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`${model}: ${msg}`);
+      errors.push(`direct:${model}: ${msg}`);
     }
   }
   return { data: null, error: errors.join(" | ") };
