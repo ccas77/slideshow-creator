@@ -1,139 +1,243 @@
+import { appendAttemptLog, type AttemptOutcome } from "@/lib/attempt-log";
+
 const PB_BASE = "https://api.post-bridge.com";
 
-const MAX_RETRIES = 3;
+// Retry policy per spec (2026-06-18): retry idempotent / safe calls up to 3
+// times with a 30s wait between attempts. Retry on 5xx and network errors.
+// Do NOT retry on 4xx (real config / auth problems, want to know immediately).
+// POST /v1/posts is NOT retryable even on 5xx: re-issuing it can produce a
+// duplicate post on TikTok if PostBridge accepted the first request and only
+// the response failed (root cause of the 2026-05-08 duplicate-post incident).
 
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
-  retries = MAX_RETRIES
-): Promise<Response> {
-  const method = (init.method || "GET").toUpperCase();
-  const path = url.replace(PB_BASE, "");
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(url, init);
-      if (res.status === 429) {
-        if (method !== "GET") {
-          console.log(`[post-bridge] 429 on ${method} ${path} — NOT retrying to avoid duplicate posts.`);
-          return res;
-        }
-        if (attempt < retries) {
-          const wait = Math.pow(2, attempt) * 1000;
-          console.log(`[post-bridge] 429 on GET ${path}, retry ${attempt + 1} in ${wait}ms...`);
-          await new Promise((r) => setTimeout(r, wait));
-          continue;
-        }
-      }
-      return res;
-    } catch (err) {
-      lastError = err;
-      const msg = err instanceof Error ? err.message : String(err);
-      if (attempt < retries) {
-        const wait = Math.pow(2, attempt) * 1000;
-        console.log(`[post-bridge] network error on ${method} ${path}: ${msg}, retry ${attempt + 1} in ${wait}ms...`);
-        await new Promise((r) => setTimeout(r, wait));
-      } else {
-        console.error(`[post-bridge] network error on ${method} ${path}: ${msg}, no retries left`);
-      }
-    }
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 30_000;
+
+export class PostBridgeError extends Error {
+  constructor(
+    public path: string,
+    public method: string,
+    public status: number,
+    public body: string,
+    public attempts: number,
+  ) {
+    const attemptStr = attempts === 1 ? "1 attempt" : `${attempts} attempts`;
+    super(
+      `post-bridge ${method} ${path} HTTP ${status} (after ${attemptStr}): ${body.slice(0, 300)}`,
+    );
+    this.name = "PostBridgeError";
   }
-  throw lastError;
 }
 
-export async function pbFetch(path: string, init: RequestInit = {}) {
-  const res = await fetchWithRetry(`${PB_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${process.env.POSTBRIDGE_API_KEY}`,
-      "Content-Type": "application/json",
-      ...(init.headers || {}),
-    },
-  });
+export class NetworkError extends Error {
+  constructor(
+    public path: string,
+    public method: string,
+    public cause: unknown,
+    public attempts: number,
+  ) {
+    const causeMsg = cause instanceof Error ? cause.message : String(cause);
+    const attemptStr = attempts === 1 ? "1 attempt" : `${attempts} attempts`;
+    super(
+      `network error ${method} ${path} (after ${attemptStr}): ${causeMsg}`,
+    );
+    this.name = "NetworkError";
+  }
+}
+
+async function retryFetch(
+  label: string,
+  method: string,
+  doFetch: () => Promise<Response>,
+  opts: { retryable: boolean },
+): Promise<Response> {
+  const max = opts.retryable ? MAX_ATTEMPTS : 1;
+  let lastErr: unknown = null;
+  let lastStatus: number | null = null;
+  let lastBody = "";
+
+  for (let attempt = 1; attempt <= max; attempt++) {
+    const ts = new Date().toISOString();
+    try {
+      const res = await doFetch();
+
+      if (res.status >= 500 && res.status < 600) {
+        const body = await res.text();
+        const willRetry = attempt < max && opts.retryable;
+        const outcome: AttemptOutcome = willRetry
+          ? "retry"
+          : opts.retryable
+            ? "exhausted"
+            : "fail-fast";
+        await appendAttemptLog({
+          timestamp: ts,
+          path: label,
+          method,
+          attempt,
+          maxAttempts: max,
+          status: res.status,
+          outcome,
+          errorMessage: body.slice(0, 300),
+        });
+        lastErr = new PostBridgeError(label, method, res.status, body, attempt);
+        lastStatus = res.status;
+        lastBody = body;
+        if (!willRetry) throw lastErr;
+        console.log(
+          `[post-bridge] retry ${attempt}/${max} on ${method} ${label} (${res.status}), waiting ${RETRY_DELAY_MS}ms`,
+        );
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+
+      await appendAttemptLog({
+        timestamp: ts,
+        path: label,
+        method,
+        attempt,
+        maxAttempts: max,
+        status: res.status,
+        outcome: res.ok ? "success" : "fail-fast",
+        errorMessage: res.ok ? undefined : `HTTP ${res.status}`,
+      });
+      return res;
+    } catch (err) {
+      if (err instanceof PostBridgeError) throw err;
+
+      const willRetry = attempt < max && opts.retryable;
+      const outcome: AttemptOutcome = willRetry
+        ? "retry"
+        : opts.retryable
+          ? "exhausted"
+          : "fail-fast";
+      const msg = err instanceof Error ? err.message : String(err);
+      await appendAttemptLog({
+        timestamp: ts,
+        path: label,
+        method,
+        attempt,
+        maxAttempts: max,
+        status: null,
+        outcome,
+        errorMessage: msg.slice(0, 300),
+      });
+      if (!willRetry) {
+        throw new NetworkError(label, method, err, attempt);
+      }
+      lastErr = err;
+      console.log(
+        `[post-bridge] retry ${attempt}/${max} on ${method} ${label} (network: ${msg}), waiting ${RETRY_DELAY_MS}ms`,
+      );
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+    }
+  }
+
+  if (lastErr instanceof Error) throw lastErr;
+  throw new PostBridgeError(label, method, lastStatus ?? 500, lastBody, max);
+}
+
+export async function pbFetch(
+  path: string,
+  init: RequestInit = {},
+  opts: { retryable?: boolean } = {},
+) {
+  const method = (init.method || "GET").toUpperCase();
+  const retryable = opts.retryable ?? false;
+
+  const res = await retryFetch(
+    path,
+    method,
+    () =>
+      fetch(`${PB_BASE}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${process.env.POSTBRIDGE_API_KEY}`,
+          "Content-Type": "application/json",
+          ...(init.headers || {}),
+        },
+      }),
+    { retryable },
+  );
+
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`post-bridge ${path} ${res.status}: ${body}`);
+    throw new PostBridgeError(path, method, res.status, body, 1);
   }
   return res.json();
 }
 
-async function s3PutWithRetry(
+async function s3Put(
   uploadUrl: string,
   contentType: string,
   buffer: Buffer,
-  retries = MAX_RETRIES
 ): Promise<void> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const putRes = await fetch(uploadUrl, {
+  await retryFetch(
+    "S3 PUT (presigned)",
+    "PUT",
+    async () =>
+      fetch(uploadUrl, {
         method: "PUT",
         headers: { "Content-Type": contentType },
         body: new Uint8Array(buffer),
-      });
-      if (!putRes.ok) {
-        const t = await putRes.text();
-        throw new Error(`S3 upload failed: ${putRes.status} ${t}`);
-      }
-      return;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (attempt < retries) {
-        const wait = Math.pow(2, attempt) * 1000;
-        console.log(`[post-bridge] S3 PUT error: ${msg}, retry ${attempt + 1} in ${wait}ms...`);
-        await new Promise((r) => setTimeout(r, wait));
-      } else {
-        throw err;
-      }
-    }
-  }
+      }),
+    { retryable: true },
+  );
 }
 
-export async function uploadPng(
-  buffer: Buffer,
-  name: string
-): Promise<string> {
-  const upload = await pbFetch("/v1/media/create-upload-url", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      mime_type: "image/png",
-      size_bytes: buffer.length,
-    }),
-  });
-  await s3PutWithRetry(upload.upload_url, "image/png", buffer);
+export async function uploadPng(buffer: Buffer, name: string): Promise<string> {
+  const upload = await pbFetch(
+    "/v1/media/create-upload-url",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        mime_type: "image/png",
+        size_bytes: buffer.length,
+      }),
+    },
+    { retryable: true },
+  );
+  await s3Put(upload.upload_url, "image/png", buffer);
   return upload.media_id;
 }
 
 export async function uploadImage(
   buffer: Buffer,
   name: string,
-  mimeType: "image/png" | "image/jpeg" = "image/png"
+  mimeType: "image/png" | "image/jpeg" = "image/png",
 ): Promise<string> {
-  const upload = await pbFetch("/v1/media/create-upload-url", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      mime_type: mimeType,
-      size_bytes: buffer.length,
-    }),
-  });
-  await s3PutWithRetry(upload.upload_url, mimeType, buffer);
+  const upload = await pbFetch(
+    "/v1/media/create-upload-url",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        mime_type: mimeType,
+        size_bytes: buffer.length,
+      }),
+    },
+    { retryable: true },
+  );
+  await s3Put(upload.upload_url, mimeType, buffer);
   return upload.media_id;
 }
 
 export async function uploadVideo(
   buffer: Buffer,
-  name: string
+  name: string,
 ): Promise<string> {
-  const upload = await pbFetch("/v1/media/create-upload-url", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      mime_type: "video/mp4",
-      size_bytes: buffer.length,
-    }),
-  });
-  await s3PutWithRetry(upload.upload_url, "video/mp4", buffer);
+  const upload = await pbFetch(
+    "/v1/media/create-upload-url",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        mime_type: "video/mp4",
+        size_bytes: buffer.length,
+      }),
+    },
+    { retryable: true },
+  );
+  await s3Put(upload.upload_url, "video/mp4", buffer);
   return upload.media_id;
 }
 
@@ -144,7 +248,11 @@ export async function uploadVideo(
 export async function listTikTokAccounts(): Promise<
   { id: number; username: string }[]
 > {
-  const r = await pbFetch("/v1/social-accounts?platform=tiktok&limit=100");
+  const r = await pbFetch(
+    "/v1/social-accounts?platform=tiktok&limit=100",
+    {},
+    { retryable: true },
+  );
   return (r.data || []).map((a: { id: number; username: string }) => ({
     id: a.id,
     username: a.username,

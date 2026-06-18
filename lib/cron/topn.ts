@@ -88,8 +88,8 @@ export async function runTopNPhase(
       const msg = err instanceof Error ? err.message : String(err);
       topNResults.push({ userId: user.id, listName: "(topn-auto)", status: `error: ${msg}` });
       await notify({
-        subject: `BookPulls Creator: TopN build failed for user ${user.id}`,
-        body: `User: ${user.id}\nFailed during TopN job build (before publishing).\n\n${msg}`,
+        subject: `[CONFIRMED] TopN build failed for user ${user.id}`,
+        body: `Confirmed failure - this is config/data, not a transient blip.\n\nUser: ${user.id}\nStep: TopN job build (before publishing)\n\n${msg}`,
         dedupeKey: `topn-build-fail:${user.id}:${new Date().toISOString().slice(0, 13)}`,
         cooldownSec: 3600,
       });
@@ -193,8 +193,8 @@ export async function runTopNPhase(
         });
         failedTopNKeys.push(`topn:${topNJob.user.id}:${topNJob.accIdStr}:${win.start}`);
         await notify({
-          subject: `BookPulls Creator: TopN post failed for account ${topNJob.accIdStr}`,
-          body: `User: ${topNJob.user.id}\nAccount: ${topNJob.accIdStr}\nList: ${topNJob.selectedList.name}\nWindow: ${win.start}-${win.end}\n\n${msg}`,
+          subject: `[CONFIRMED] TopN post failed for account ${topNJob.accIdStr}`,
+          body: `Confirmed failure after retries.\n\nUser: ${topNJob.user.id}\nAccount: ${topNJob.accIdStr}\nStep: TopN post pipeline\nList: ${topNJob.selectedList.name}\nWindow: ${win.start}-${win.end}\n\n${msg}`,
           dedupeKey: `topn-fail:${topNJob.user.id}:${topNJob.accIdStr}:${new Date().toISOString().slice(0, 13)}`,
           cooldownSec: 3600,
         });
