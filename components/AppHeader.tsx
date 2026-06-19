@@ -60,8 +60,15 @@ export default function AppHeader() {
           {link("/books", "Books")}
           {link("/instagram", "Instagram")}
           {link("/top-books", "Top Books")}
+          <a
+            href="https://bookshelf.bookpulls.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+          >
+            Bookshelf
+          </a>
           {link("/posts", "Posts")}
-          {link("/post-log", "Post Log")}
           {me?.role === "admin" && (
             <Link
               href="/admin"

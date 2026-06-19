@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPostLog, appendPostLog, PostLogEntry } from "@/lib/kv";
-import { requireSession } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import { listTikTokAccounts, pbFetch } from "@/lib/post-bridge";
 
 export async function GET(req: NextRequest) {
-  const { error } = await requireSession(req);
+  const { error } = await requireAdmin(req);
   if (error) return error;
 
   const date = new URL(req.url).searchParams.get("date");
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession(req);
+  const { session, error } = await requireAdmin(req);
   if (error) return error;
 
   const { date } = await req.json();

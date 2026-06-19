@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAccountData, getPostLog, appendPostLog, PostLogEntry } from "@/lib/kv";
 import { listUsers } from "@/lib/auth";
 import { listTikTokAccounts, pbFetch } from "@/lib/post-bridge";
-import { requireSession } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const { error } = await requireSession(req);
+  const { error } = await requireAdmin(req);
   if (error) return error;
 
   const accounts = await listTikTokAccounts();
