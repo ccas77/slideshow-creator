@@ -9,6 +9,7 @@ import { publishTopN } from "@/lib/topn-publisher";
 import { shouldProcessWindow, randomTimeInWindow } from "./window";
 import { markScheduled, unmarkScheduled } from "./scheduled-today";
 import { notify } from "@/lib/notify";
+import { notifyPostFailure } from "@/lib/post-failure";
 import type { TopNResult } from "./types";
 
 export async function runTopNPhase(
@@ -149,8 +150,9 @@ export async function runTopNPhase(
   const failedTopNKeys: string[] = [];
   for (const topNJob of topNJobs) {
     for (const win of topNJob.activeWindows) {
+      let scheduledAt: Date | undefined;
       try {
-        const scheduledAt = randomTimeInWindow(win.start, win.end);
+        scheduledAt = randomTimeInWindow(win.start, win.end);
         const r = await publishTopN({
           userId: topNJob.user.id,
           listId: topNJob.selectedList.id,
@@ -186,18 +188,29 @@ export async function runTopNPhase(
         }).catch(() => {});
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        topNResults.push({
-          userId: topNJob.user.id,
-          listName: topNJob.selectedList.name,
-          status: `error (${topNJob.accIdStr}): ${msg}`,
-        });
-        failedTopNKeys.push(`topn:${topNJob.user.id}:${topNJob.accIdStr}:${win.start}`);
-        await notify({
+        const result = await notifyPostFailure({
           subject: `[CONFIRMED] TopN post failed for account ${topNJob.accIdStr}`,
           body: `Confirmed failure after retries.\n\nUser: ${topNJob.user.id}\nAccount: ${topNJob.accIdStr}\nStep: TopN post pipeline\nList: ${topNJob.selectedList.name}\nWindow: ${win.start}-${win.end}\n\n${msg}`,
+          error: err,
+          accountId: Number(topNJob.accIdStr),
+          scheduledAt,
           dedupeKey: `topn-fail:${topNJob.user.id}:${topNJob.accIdStr}:${new Date().toISOString().slice(0, 13)}`,
           cooldownSec: 3600,
         });
+        if (result.verified) {
+          topNResults.push({
+            userId: topNJob.user.id,
+            listName: topNJob.selectedList.name,
+            status: `${topNJob.accIdStr}: verified-after-error`,
+          });
+        } else {
+          topNResults.push({
+            userId: topNJob.user.id,
+            listName: topNJob.selectedList.name,
+            status: `error (${topNJob.accIdStr}): ${msg}`,
+          });
+          failedTopNKeys.push(`topn:${topNJob.user.id}:${topNJob.accIdStr}:${win.start}`);
+        }
       }
     }
   }

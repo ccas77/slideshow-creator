@@ -12,6 +12,7 @@ import { pbFetch, uploadPng } from "@/lib/post-bridge";
 import { shouldProcessWindow, randomTimeInWindow } from "./window";
 import { markScheduled } from "./scheduled-today";
 import { notify } from "@/lib/notify";
+import { notifyPostFailure } from "@/lib/post-failure";
 import type { IgResult } from "./types";
 
 function pickRandom<T>(arr: T[]): T | null {
@@ -106,6 +107,7 @@ export async function runInstagramPhase(
           const texts = ss.slideTexts.split("\n").map((t) => t.trim()).filter(Boolean);
           if (texts.length < 2) continue;
 
+          let scheduledAt: Date | undefined;
           try {
             const imgResult = await generateImageWithInfo(prompt.value);
             if (!imgResult.data) {
@@ -128,7 +130,7 @@ export async function runInstagramPhase(
               ? { instagram: {} }
               : { tiktok: { draft: false, is_aigc: false } };
 
-            const scheduledAt = randomTimeInWindow(win.start, win.end);
+            scheduledAt = randomTimeInWindow(win.start, win.end);
             const postResp = await pbFetch("/v1/posts", {
               method: "POST",
               body: JSON.stringify({
@@ -167,13 +169,21 @@ export async function runInstagramPhase(
             }).catch(() => {});
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            igAutoResults.push({ userId: user.id, status: `error (${accIdStr}): ${msg}` });
-            await notify({
+            const result = await notifyPostFailure({
               subject: `[CONFIRMED] IG post failed for account ${accIdStr}`,
               body: `Confirmed failure after retries.\n\nUser: ${user.id}\nAccount: ${accIdStr}\nStep: IG post pipeline\nSlideshow: ${ss.name}\nWindow: ${win.start}-${win.end}\n\n${msg}`,
+              error: err,
+              accountId: accId,
+              scheduledAt,
+              captionSlice: caption?.value || "",
               dedupeKey: `ig-fail:${user.id}:${accIdStr}:${new Date().toISOString().slice(0, 13)}`,
               cooldownSec: 3600,
             });
+            if (result.verified) {
+              igAutoResults.push({ userId: user.id, status: `${ss.name} → ${accIdStr} verified-after-error` });
+            } else {
+              igAutoResults.push({ userId: user.id, status: `error (${accIdStr}): ${msg}` });
+            }
           }
 
           pointer++;

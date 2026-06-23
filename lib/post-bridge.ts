@@ -258,3 +258,53 @@ export async function listTikTokAccounts(): Promise<
     username: a.username,
   }));
 }
+
+// When POST /v1/posts errors after PostBridge has actually accepted the post
+// (5xx from their gateway, network drop on response, etc.), we can't safely
+// retry (duplicate-post risk per 2026-05-08). But we CAN check whether the
+// post made it through by listing posts for that account and matching on
+// scheduled_at + caption.
+export interface VerifyParams {
+  accountId: number;
+  scheduledAtISO: string;
+  captionSlice?: string;
+  waitMs?: number;
+  toleranceMs?: number;
+}
+
+export async function verifyPostScheduled(p: VerifyParams): Promise<boolean> {
+  await new Promise((r) => setTimeout(r, p.waitMs ?? 8000));
+  try {
+    const resp = await pbFetch(
+      `/v1/posts?social_account_id=${p.accountId}&limit=50`,
+      {},
+      { retryable: true },
+    );
+    const posts: Array<{ scheduled_at?: string; caption?: string }> =
+      resp.data || resp.posts || [];
+    const target = new Date(p.scheduledAtISO).getTime();
+    if (!Number.isFinite(target)) return false;
+    const tolerance = p.toleranceMs ?? 5 * 60 * 1000;
+    const captionMatch = (p.captionSlice || "").slice(0, 40).trim();
+    return posts.some((post) => {
+      if (!post.scheduled_at) return false;
+      const t = new Date(post.scheduled_at).getTime();
+      if (!Number.isFinite(t)) return false;
+      if (Math.abs(t - target) > tolerance) return false;
+      if (captionMatch && post.caption && !post.caption.includes(captionMatch)) return false;
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+
+export function isPostsCreateError(err: unknown): boolean {
+  if (err instanceof PostBridgeError) {
+    return err.method === "POST" && err.path === "/v1/posts";
+  }
+  if (err instanceof NetworkError) {
+    return err.method === "POST" && err.path === "/v1/posts";
+  }
+  return false;
+}
