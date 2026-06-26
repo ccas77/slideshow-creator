@@ -1,5 +1,9 @@
 import { notify } from "@/lib/notify";
-import { verifyPostScheduled, isPostsCreateError } from "@/lib/post-bridge";
+import {
+  verifyPostScheduled,
+  verifyAccountHasPostsToday,
+  isPostsCreateError,
+} from "@/lib/post-bridge";
 
 interface NotifyPostFailureOpts {
   subject: string;
@@ -12,29 +16,42 @@ interface NotifyPostFailureOpts {
   cooldownSec?: number;
 }
 
-// Decides whether to email or silently swallow a post failure. Catches the
-// "PostBridge accepted but response failed" case (the source of the
-// 2026-06-23 crying-wolf reports) by verifying via list query before
-// alerting.
+// Decides whether to email or silently swallow a post failure.
 //
-// Only applies the verification step when the error is a POST /v1/posts
-// error AND we have a scheduledAt to match against. Upload errors, build
-// errors, and 4xx errors skip verification and email immediately — those
-// are real failures where nothing got scheduled.
+// Two-stage suppression (per 2026-06-26 redesign after repeated crying-wolf
+// complaints):
 //
-// Returns { verified: true } when PostBridge actually has the post despite
-// the throw. Caller should treat this as a soft success.
+// 1. Precise match. For POST /v1/posts errors specifically: PostBridge may
+//    have accepted the post even though the response failed. Query for a
+//    matching scheduled_at + caption to confirm.
+//
+// 2. Broad "account posted today" check. For any failure type (upload step
+//    exhausted, build error, network error on /v1/posts): if the account
+//    has ANY post scheduled for today at PostBridge, suppress. Catches the
+//    common pattern of "an earlier or later window already posted, this
+//    single window's failure is noise."
+//
+// Only if BOTH suppression checks come back empty do we send the email.
+// Matches the user's mental model: she checks TikTok, sees whether posts
+// happened. If yes, the system works; she doesn't want to be paged.
 export async function notifyPostFailure(
   opts: NotifyPostFailureOpts,
 ): Promise<{ verified: boolean }> {
+  // Stage 1: precise match for POST /v1/posts response-after-success case.
   if (isPostsCreateError(opts.error) && opts.scheduledAt) {
-    const verified = await verifyPostScheduled({
+    const exactMatch = await verifyPostScheduled({
       accountId: opts.accountId,
       scheduledAtISO: opts.scheduledAt.toISOString(),
       captionSlice: opts.captionSlice,
     });
-    if (verified) return { verified: true };
+    if (exactMatch) return { verified: true };
   }
+
+  // Stage 2: broad "did this account post anything today" check. Applies
+  // to all failure types — if the account is posting fine via other paths,
+  // a single hiccup is not worth an alert.
+  const anyToday = await verifyAccountHasPostsToday(opts.accountId);
+  if (anyToday) return { verified: true };
 
   await notify({
     subject: opts.subject,

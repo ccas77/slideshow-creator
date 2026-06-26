@@ -40,14 +40,22 @@ export async function appendAttemptLog(entry: AttemptLogEntry): Promise<void> {
 export async function readAttemptLog(date: string): Promise<AttemptLogEntry[]> {
   const key = `${LOG_KEY_PREFIX}${date}`;
   try {
-    const raw = await redis.lrange<string>(key, 0, -1);
+    // Upstash's lrange auto-deserialises JSON-shaped strings, so values come
+    // back already as objects in some configurations. Handle both shapes.
+    const raw = (await redis.lrange<unknown>(key, 0, -1)) as Array<unknown>;
     return raw
-      .map((s) => {
-        try {
-          return JSON.parse(s) as AttemptLogEntry;
-        } catch {
-          return null;
+      .map((s): AttemptLogEntry | null => {
+        if (typeof s === "object" && s !== null) {
+          return s as AttemptLogEntry;
         }
+        if (typeof s === "string") {
+          try {
+            return JSON.parse(s) as AttemptLogEntry;
+          } catch {
+            return null;
+          }
+        }
+        return null;
       })
       .filter((x): x is AttemptLogEntry => x !== null);
   } catch {
