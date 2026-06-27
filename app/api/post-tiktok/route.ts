@@ -110,8 +110,10 @@ export async function GET(req: NextRequest) {
       }>) {
         const pd = r.platform_data;
         const analytics = analyticsMap.get(r.id) || null;
-        // Build post URL: prefer analytics share_url, fall back to platform_data
-        let postUrl = analytics?.share_url || null;
+        // Build post URL: prefer analytics share_url, then PostBridge's own
+        // platform_data.url (now populated for IG/FB and partially for TikTok),
+        // then the legacy v2.<id> regex fallback for older entries.
+        let postUrl = analytics?.share_url || pd?.url || null;
         if (!postUrl && pd?.id && pd?.username) {
           const match = pd.id.match(/v2\.(\d+)/);
           if (match) {
