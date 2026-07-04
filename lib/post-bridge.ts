@@ -272,21 +272,31 @@ export interface VerifyParams {
   toleranceMs?: number;
 }
 
+// NOTE (2026-07-04): PostBridge's `?social_account_id=` query parameter is
+// silently ignored — the endpoint returns the whole feed regardless. Filter
+// client-side on post.social_accounts. This was the source of the hidden
+// 2026-06-26 → 2026-07-04 silent-failure bug where every TopN error was
+// suppressed because "some" account had posts today. Never trust
+// server-side filters on /v1/posts without verifying with a nonsense value.
 export async function verifyPostScheduled(p: VerifyParams): Promise<boolean> {
   await new Promise((r) => setTimeout(r, p.waitMs ?? 8000));
   try {
     const resp = await pbFetch(
-      `/v1/posts?social_account_id=${p.accountId}&limit=50`,
+      "/v1/posts?limit=100",
       {},
       { retryable: true },
     );
-    const posts: Array<{ scheduled_at?: string; caption?: string }> =
-      resp.data || resp.posts || [];
+    const posts: Array<{
+      scheduled_at?: string;
+      caption?: string;
+      social_accounts?: number[];
+    }> = resp.data || resp.posts || [];
     const target = new Date(p.scheduledAtISO).getTime();
     if (!Number.isFinite(target)) return false;
     const tolerance = p.toleranceMs ?? 5 * 60 * 1000;
     const captionMatch = (p.captionSlice || "").slice(0, 40).trim();
     return posts.some((post) => {
+      if (!(post.social_accounts || []).includes(p.accountId)) return false;
       if (!post.scheduled_at) return false;
       const t = new Date(post.scheduled_at).getTime();
       if (!Number.isFinite(t)) return false;
@@ -309,14 +319,18 @@ export async function verifyAccountHasPostsToday(
   await new Promise((r) => setTimeout(r, waitMs));
   try {
     const resp = await pbFetch(
-      `/v1/posts?social_account_id=${accountId}&limit=20`,
+      "/v1/posts?limit=100",
       {},
       { retryable: true },
     );
-    const posts: Array<{ scheduled_at?: string; created_at?: string }> =
-      resp.data || resp.posts || [];
+    const posts: Array<{
+      scheduled_at?: string;
+      created_at?: string;
+      social_accounts?: number[];
+    }> = resp.data || resp.posts || [];
     const today = new Date().toISOString().slice(0, 10);
     return posts.some((p) => {
+      if (!(p.social_accounts || []).includes(accountId)) return false;
       const d = (p.scheduled_at || p.created_at || "").slice(0, 10);
       return d === today;
     });
