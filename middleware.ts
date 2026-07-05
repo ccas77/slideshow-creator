@@ -9,6 +9,7 @@ const PUBLIC_API_PREFIXES = [
   "/api/auth/callback",
   "/api/auth/me",
   "/api/cron", // guarded separately by CRON_SECRET
+  "/api/status", // guarded separately by CRON_SECRET (manager consumes this)
   "/api/post-results", // guarded separately by CRON_SECRET
   "/api/admin/diagnose-configs", // guarded by CRON_SECRET / session
   "/api/admin/migrate-configs",  // guarded by CRON_SECRET / session
