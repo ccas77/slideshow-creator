@@ -1,5 +1,4 @@
 import { redis } from "@/lib/kv";
-import { verifyAccountHasPostsToday } from "@/lib/post-bridge";
 
 const RESEND_URL = "https://api.resend.com/emails";
 
@@ -10,20 +9,19 @@ interface NotifyOptions {
   cooldownSec?: number;
 }
 
-// Recheck context is what turns a raw failure into a deferred alert. When
-// this is set on a notify() call, we don't email right away; we drop the
-// alert into a Redis-backed pending queue with a `fireAt` 30 min in the
-// future. Every cron run drains due entries and asks "is this still a
-// problem?" — if yes, email; if no, drop silently.
+// Per 2026-07-06 rewrite: no more individual failure emails. Every notify()
+// call appends to a Redis daily digest list keyed by UTC date. A daily cron
+// (see app/api/cron/daily-digest) sends ONE email each morning summarising
+// the previous day's alerts. The digest list also stays readable via the
+// Upstash REST API so Claude Code can inspect it when the user asks for
+// investigation the next morning.
 //
-// The 30-min gap is chosen so that the next hourly / half-hourly cron has
-// had a chance to retry the same account. That catches the "PB was flaky
-// at 00:00, healed by 00:30" pattern that's been waking the user up.
+// Legacy per-call fields (dedupeKey / cooldownSec / recheck) are captured in
+// the digest entry so context isn't lost, but they no longer gate sending.
+
+// Kept for API compatibility with older callers. Ignored by the new digest
+// path but not harmful.
 export interface RecheckContext {
-  // Right now the only real recheck we know how to run is "did this
-  // account get anything posted today at PB." Every deferrable alert
-  // carries an accountId; if the recheck at fireAt time shows the account
-  // has posts today, we drop the alert.
   accountId: number;
 }
 
@@ -31,92 +29,121 @@ interface NotifyOptionsWithRecheck extends NotifyOptions {
   recheck?: RecheckContext;
 }
 
-const DEFER_MS = 30 * 60 * 1000;    // 30 min defer
-const MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6 h max age — always fire past this
-const PENDING_KEY_PREFIX = "pending-alert:";
+const DIGEST_KEY_PREFIX = "daily-digest:";
+const DIGEST_TTL_SEC = 30 * 86400; // 30 days
+const DIGEST_MAX_ENTRIES = 500;
 
-interface PendingAlert {
-  fireAt: string;       // ISO
-  originalAt: string;   // ISO
+interface DigestEntry {
+  at: string;
   subject: string;
   body: string;
   dedupeKey?: string;
-  cooldownSec?: number;
-  recheck?: RecheckContext;
+  accountId?: number;
 }
 
-// Send an email notification via Resend. No-ops silently when RESEND_API_KEY
-// is missing (so local dev / preview builds aren't blocked) or when a dedupe
-// cooldown is still active. Designed to be safe to call from inside catch
-// blocks: it never throws.
-//
-// If `recheck` is provided, the alert is deferred by 30 minutes and only
-// fires if the failure signal is still present at that point. See
-// `processPendingAlerts()` for the drain-and-recheck logic.
 export async function notify(opts: NotifyOptionsWithRecheck): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return false;
-
-  // Deferred path: park in Redis, let the next cron decide.
-  if (opts.recheck) {
-    return queuePendingAlert(opts);
-  }
-
-  return sendNow(opts);
-}
-
-async function queuePendingAlert(opts: NotifyOptionsWithRecheck): Promise<boolean> {
-  if (!opts.dedupeKey) {
-    // Deferred alerts need a stable dedupeKey; without one the queue can't
-    // avoid duplicates. Fall back to sending now.
-    return sendNow(opts);
-  }
-  const key = PENDING_KEY_PREFIX + opts.dedupeKey;
-  const now = new Date();
-  const entry: PendingAlert = {
-    fireAt: new Date(now.getTime() + DEFER_MS).toISOString(),
-    originalAt: now.toISOString(),
+  const date = new Date().toISOString().slice(0, 10);
+  const key = DIGEST_KEY_PREFIX + date;
+  const entry: DigestEntry = {
+    at: new Date().toISOString(),
     subject: opts.subject,
     body: opts.body,
     dedupeKey: opts.dedupeKey,
-    cooldownSec: opts.cooldownSec,
-    recheck: opts.recheck,
+    accountId: opts.recheck?.accountId,
   };
   try {
-    // Only queue if not already pending for this dedupeKey — first-write
-    // wins to avoid re-timing the fireAt on every retried failure.
-    const existing = await redis.get<PendingAlert>(key);
-    if (existing) return false;
-    // TTL a bit past MAX_AGE so the entry can't linger forever if drainage
-    // stops running.
-    await redis.set(key, entry, { ex: Math.ceil(MAX_AGE_MS / 1000) + 3600 });
-    return false; // not yet sent, but successfully queued
-  } catch {
-    // If Redis is unhealthy, fall back to sending immediately so we don't
-    // lose the alert.
-    return sendNow(opts);
+    // dedupe: if dedupeKey provided and we've already got an entry for the
+    // same key within DIGEST_MAX_ENTRIES, skip. Avoids flooding when a phase
+    // fails repeatedly.
+    if (opts.dedupeKey) {
+      const existing = await redis.lrange<string | DigestEntry>(key, 0, -1);
+      for (const raw of existing) {
+        const e = typeof raw === "string" ? safeParse(raw) : (raw as DigestEntry);
+        if (e && e.dedupeKey === opts.dedupeKey) return false;
+      }
+    }
+    await redis.rpush(key, JSON.stringify(entry));
+    // Cap the list so a runaway alert loop can't blow up Redis.
+    await redis.ltrim(key, -DIGEST_MAX_ENTRIES, -1);
+    await redis.expire(key, DIGEST_TTL_SEC);
+    return true;
+  } catch (err) {
+    console.error("notify: digest append failed", err);
+    return false;
   }
 }
 
-async function sendNow(opts: NotifyOptions): Promise<boolean> {
+function safeParse(s: string): DigestEntry | null {
+  try {
+    return JSON.parse(s) as DigestEntry;
+  } catch {
+    return null;
+  }
+}
+
+// Reads today's or a specific date's digest. Used by the daily-digest cron
+// and can be curl'd via Upstash REST for out-of-band inspection.
+export async function readDigest(date: string): Promise<DigestEntry[]> {
+  const key = DIGEST_KEY_PREFIX + date;
+  try {
+    const raw = (await redis.lrange<unknown>(key, 0, -1)) as unknown[];
+    return raw
+      .map((r): DigestEntry | null => {
+        if (typeof r === "object" && r !== null) return r as DigestEntry;
+        if (typeof r === "string") return safeParse(r);
+        return null;
+      })
+      .filter((x): x is DigestEntry => x !== null);
+  } catch {
+    return [];
+  }
+}
+
+// Sends the daily digest email for the given date. If no entries, no email.
+// Returns a summary so the cron endpoint can log what happened. Never
+// throws.
+export async function sendDailyDigest(
+  date: string,
+): Promise<{
+  date: string;
+  count: number;
+  sent: boolean;
+  reason?: string;
+}> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return false;
+  if (!apiKey) return { date, count: 0, sent: false, reason: "RESEND_API_KEY not set" };
+
+  const entries = await readDigest(date);
+  if (entries.length === 0) {
+    return { date, count: 0, sent: false, reason: "no entries" };
+  }
 
   const to = process.env.NOTIFY_EMAIL || "cordeliacastel@gmail.com";
   const from = process.env.NOTIFY_FROM || "Slideshow Generator <onboarding@resend.dev>";
 
-  if (opts.dedupeKey) {
-    const cooldownKey = `notify-cooldown:${opts.dedupeKey}`;
-    try {
-      const exists = await redis.get(cooldownKey);
-      if (exists) return false;
-      await redis.set(cooldownKey, 1, { ex: opts.cooldownSec ?? 3600 });
-    } catch {
-      // If the cooldown read/write fails, fall through and send anyway.
-    }
+  const grouped = new Map<string, DigestEntry[]>();
+  for (const e of entries) {
+    const bucket = e.subject.replace(/^\[[^\]]+\]\s*/, "").split(" for ")[0].trim() || "other";
+    if (!grouped.has(bucket)) grouped.set(bucket, []);
+    grouped.get(bucket)!.push(e);
   }
 
-  const html = `<pre style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;white-space:pre-wrap;">${escapeHtml(opts.body)}</pre>`;
+  const sections: string[] = [];
+  for (const [bucket, items] of grouped) {
+    sections.push(`## ${bucket} (${items.length})`);
+    for (const e of items) {
+      const time = e.at.slice(11, 19);
+      const account = e.accountId ? ` [account ${e.accountId}]` : "";
+      sections.push(`- ${time} UTC${account}: ${e.subject}`);
+    }
+    sections.push("");
+  }
+  sections.push("---");
+  sections.push(`Full detail readable in Redis at daily-digest:${date}.`);
+  sections.push(`Total: ${entries.length} alert${entries.length === 1 ? "" : "s"}.`);
+
+  const textBody = sections.join("\n");
+  const html = `<pre style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;white-space:pre-wrap;">${escapeHtml(textBody)}</pre>`;
 
   try {
     const res = await fetch(RESEND_URL, {
@@ -128,107 +155,32 @@ async function sendNow(opts: NotifyOptions): Promise<boolean> {
       body: JSON.stringify({
         from,
         to,
-        subject: opts.subject,
+        subject: `BookPulls Creator — ${date} daily digest (${entries.length} alert${entries.length === 1 ? "" : "s"})`,
         html,
-        text: opts.body,
+        text: textBody,
       }),
     });
     if (!res.ok) {
-      console.error(`notify: Resend ${res.status} ${await res.text()}`);
-      return false;
+      const err = await res.text();
+      return { date, count: entries.length, sent: false, reason: `Resend ${res.status}: ${err}` };
     }
-    return true;
+    return { date, count: entries.length, sent: true };
   } catch (err) {
-    console.error("notify: send failed", err);
-    return false;
+    const msg = err instanceof Error ? err.message : String(err);
+    return { date, count: entries.length, sent: false, reason: msg };
   }
 }
 
-// Drain-and-recheck. Called at the top of each cron run. For each pending
-// alert whose fireAt is in the past:
-//   - If a recheck is provided and it says "already healed" → drop silently.
-//   - If past MAX_AGE_MS old → send unconditionally, don't lose the alert.
-//   - Otherwise send now.
-// Never throws — cron path calls this fire-and-forget.
+// Left as an empty no-op so existing callers (the per-cron `processPendingAlerts`
+// call in app/api/cron/post/route.ts) don't break during the transition. The
+// pending-alert path from the 30-min-defer experiment is retired.
 export async function processPendingAlerts(): Promise<{
   scanned: number;
   fired: number;
   dropped: number;
   skipped_not_due: number;
 }> {
-  const summary = { scanned: 0, fired: 0, dropped: 0, skipped_not_due: 0 };
-  try {
-    // SCAN pending-alert:*
-    let cursor = 0;
-    const keys: string[] = [];
-    do {
-      const [next, batch] = await redis.scan(cursor, {
-        match: `${PENDING_KEY_PREFIX}*`,
-        count: 100,
-      });
-      keys.push(...batch);
-      cursor = Number(next);
-    } while (cursor !== 0);
-
-    const now = Date.now();
-    for (const key of keys) {
-      summary.scanned++;
-      let entry: PendingAlert | null = null;
-      try {
-        entry = await redis.get<PendingAlert>(key);
-      } catch {
-        continue;
-      }
-      if (!entry) continue;
-      const fireAt = new Date(entry.fireAt).getTime();
-      if (!Number.isFinite(fireAt)) {
-        // Malformed — drop.
-        await redis.del(key).catch(() => {});
-        continue;
-      }
-      if (fireAt > now) {
-        summary.skipped_not_due++;
-        continue;
-      }
-
-      const originalAt = new Date(entry.originalAt).getTime();
-      const ageMs = Number.isFinite(originalAt) ? now - originalAt : DEFER_MS;
-      const forceFire = ageMs > MAX_AGE_MS;
-
-      let stillBroken = true;
-      if (!forceFire && entry.recheck) {
-        try {
-          const hasPosts = await verifyAccountHasPostsToday(
-            entry.recheck.accountId,
-            0, // no extra wait; recheck is already 30 min after
-          );
-          stillBroken = !hasPosts;
-        } catch {
-          // Recheck itself failed — assume still broken so we don't drop
-          // a real alert.
-          stillBroken = true;
-        }
-      }
-
-      if (stillBroken) {
-        const bodyWithNote =
-          `${entry.body}\n\n---\nDeferred ${Math.round(ageMs / 60000)} min then rechecked; still broken.`;
-        await sendNow({
-          subject: entry.subject,
-          body: bodyWithNote,
-          dedupeKey: entry.dedupeKey,
-          cooldownSec: entry.cooldownSec,
-        });
-        summary.fired++;
-      } else {
-        summary.dropped++;
-      }
-      await redis.del(key).catch(() => {});
-    }
-  } catch {
-    // never throw — this is fire-and-forget from the cron start.
-  }
-  return summary;
+  return { scanned: 0, fired: 0, dropped: 0, skipped_not_due: 0 };
 }
 
 function escapeHtml(s: string): string {
