@@ -53,11 +53,16 @@ export async function notifyPostFailure(
   const anyToday = await verifyAccountHasPostsToday(opts.accountId);
   if (anyToday) return { verified: true };
 
+  // Stage 3: defer-and-recheck. Queue the alert with a 30-min fireAt; the
+  // next cron drains the queue and only sends alerts whose re-verification
+  // still shows the account has no post today. Catches the "PB flaky at
+  // :00, healed by :30" pattern.
   await notify({
     subject: opts.subject,
     body: opts.body,
     dedupeKey: opts.dedupeKey,
     cooldownSec: opts.cooldownSec,
+    recheck: { accountId: opts.accountId },
   });
   return { verified: false };
 }
