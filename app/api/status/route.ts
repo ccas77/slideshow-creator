@@ -56,7 +56,7 @@ async function safeGet<T>(c: Redis, key: string): Promise<T | null> {
   }
 }
 
-async function computeYesterday(now: Date): Promise<{
+type YesterdayResult = {
   date: string;
   planned: number | null;
   attempted: number;
@@ -64,19 +64,14 @@ async function computeYesterday(now: Date): Promise<{
   attemptGap: number | null;
   confirmGap: number;
   error: string | null;
-}> {
+  unconfirmed: Array<{ target: string; postBridgeId: string; error?: string }>;
+};
+
+async function computeYesterday(now: Date): Promise<YesterdayResult> {
   const utcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const yesterdayStart = utcMidnight.getTime() - DAY_MS;
   const yDate = new Date(yesterdayStart).toISOString().slice(0, 10);
-  const out: {
-    date: string;
-    planned: number | null;
-    attempted: number;
-    confirmed: number;
-    attemptGap: number | null;
-    confirmGap: number;
-    error: string | null;
-  } = {
+  const out: YesterdayResult = {
     date: yDate,
     planned: null,
     attempted: 0,
@@ -84,17 +79,14 @@ async function computeYesterday(now: Date): Promise<{
     attemptGap: null,
     confirmGap: 0,
     error: null,
+    unconfirmed: [],
   };
   let planned: number | null = null;
   let attempted = 0;
-  const attemptedPostBridgeIds: string[] = [];
+  const attemptedEntries: PostLogEntry[] = [];
 
   try {
     const c = client();
-    // Planned: cron-scheduled:{yesterday} is a set the cron populates during
-    // the day, but the app expires it at midnight UTC + 1h. So by the time
-    // we query for yesterday, the key is gone. Try to read it in case it
-    // hasn't expired yet, otherwise report null so the manager shows "—".
     try {
       const members = await c.smembers(`cron-scheduled:${yDate}`);
       if (Array.isArray(members) && members.length > 0) planned = members.length;
@@ -102,12 +94,11 @@ async function computeYesterday(now: Date): Promise<{
       // ignore
     }
 
-    // Attempted: post-log:{yesterday} lists posts the app tried to make.
     const postLog =
       (await safeGet<PostLogEntry[]>(c, `post-log:${yDate}`)) ?? [];
     attempted = postLog.length;
     for (const e of postLog) {
-      if (e.postBridgeId) attemptedPostBridgeIds.push(e.postBridgeId);
+      if (e.postBridgeId) attemptedEntries.push(e);
     }
   } catch (e) {
     out.error = (e as Error).message;
@@ -117,8 +108,7 @@ async function computeYesterday(now: Date): Promise<{
   out.planned = planned as number;
   out.attempted = attempted;
 
-  // Confirmed: verify each attempted post_id with Post Bridge (success=true).
-  if (attemptedPostBridgeIds.length === 0) {
+  if (attemptedEntries.length === 0) {
     out.attemptGap = planned === null ? null : Math.max(0, planned - attempted);
     return out;
   }
@@ -127,22 +117,35 @@ async function computeYesterday(now: Date): Promise<{
     return out;
   }
   try {
-    const uniq = [...new Set(attemptedPostBridgeIds)];
+    const uniq = [...new Set(attemptedEntries.map((e) => e.postBridgeId).filter(Boolean) as string[])];
     const chunks: string[][] = [];
     for (let i = 0; i < uniq.length; i += PB_CHUNK) chunks.push(uniq.slice(i, i + PB_CHUNK));
     const successById = new Set<string>();
+    const errorById = new Map<string, string>();
     for (const chunk of chunks) {
       const qs = new URLSearchParams({ limit: "100" });
       for (const id of chunk) qs.append("post_id", id);
       const r = await pbGet<{ data?: PBPostResult[] }>(`/v1/post-results?${qs}`);
       for (const row of r.data || []) {
-        if (row.post_id && row.success === true) successById.add(row.post_id);
+        if (!row.post_id) continue;
+        if (row.success === true) successById.add(row.post_id);
+        else if (row.error && !errorById.has(row.post_id)) {
+          errorById.set(row.post_id, typeof row.error === "string" ? row.error : JSON.stringify(row.error));
+        }
       }
     }
-    // Confirmed = attempted rows whose postBridgeId shows success in PB.
     let confirmed = 0;
-    for (const id of attemptedPostBridgeIds) {
-      if (successById.has(id)) confirmed += 1;
+    for (const e of attemptedEntries) {
+      if (!e.postBridgeId) continue;
+      if (successById.has(e.postBridgeId)) {
+        confirmed += 1;
+      } else if (out.unconfirmed.length < 25) {
+        out.unconfirmed.push({
+          target: e.accountName || `account:${e.accountId}`,
+          postBridgeId: e.postBridgeId,
+          error: errorById.get(e.postBridgeId),
+        });
+      }
     }
     out.confirmed = confirmed;
   } catch (e) {
