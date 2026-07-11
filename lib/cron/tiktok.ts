@@ -14,6 +14,7 @@ import { shouldProcessWindow, randomTimeInWindow } from "./window";
 import { markScheduled, unmarkScheduled, getScheduledToday } from "./scheduled-today";
 import { notify } from "@/lib/notify";
 import { notifyPostFailure } from "@/lib/post-failure";
+import { withJobTimeout, JOB_TIMEOUT_MS } from "./with-timeout";
 import type { Job, CronAccountResult } from "./types";
 
 function pickRandom<T>(arr: T[]): T | null {
@@ -302,69 +303,71 @@ export async function runTikTokPhase(
   async function processJob(job: Job): Promise<{ job: Job; status: string; scheduledAt?: string; postId?: string }> {
     let scheduledAt: Date | undefined;
     try {
-      const imgResult = await generateImageWithInfo(job.imagePrompt);
-      if (!imgResult.data) {
-        debugLog.push(`${job.acc.username} (${job.acc.id}) ${job.win.start}: image gen failed — ${imgResult.error || "unknown"}`);
-        return { job, status: `skipped: image generation failed — ${imgResult.error || "unknown"}` };
-      }
+      return await withJobTimeout((async () => {
+        const imgResult = await generateImageWithInfo(job.imagePrompt);
+        if (!imgResult.data) {
+          debugLog.push(`${job.acc.username} (${job.acc.id}) ${job.win.start}: image gen failed — ${imgResult.error || "unknown"}`);
+          return { job, status: `skipped: image generation failed — ${imgResult.error || "unknown"}` };
+        }
 
-      const slideBufs: Buffer[] = [];
-      for (const text of job.slideTexts) {
-        slideBufs.push(await renderSlide(imgResult.data, text));
-      }
+        const slideBufs: Buffer[] = [];
+        for (const text of job.slideTexts) {
+          slideBufs.push(await renderSlide(imgResult.data, text));
+        }
 
-      const mediaIds: string[] = [];
-      for (let j = 0; j < slideBufs.length; j++) {
-        mediaIds.push(await uploadPng(slideBufs[j], `slide-${j + 1}.png`));
-      }
+        const mediaIds: string[] = [];
+        for (let j = 0; j < slideBufs.length; j++) {
+          mediaIds.push(await uploadPng(slideBufs[j], `slide-${j + 1}.png`));
+        }
 
-      if (job.coverImage) {
-        const coverSlideBuf = await renderCoverSlide(imgResult.data, job.coverImage);
-        mediaIds.push(await uploadPng(coverSlideBuf, `slide-${slideBufs.length + 1}-cover.png`));
-      }
+        if (job.coverImage) {
+          const coverSlideBuf = await renderCoverSlide(imgResult.data, job.coverImage);
+          mediaIds.push(await uploadPng(coverSlideBuf, `slide-${slideBufs.length + 1}-cover.png`));
+        }
 
-      scheduledAt = randomTimeInWindow(job.win.start, job.win.end);
+        scheduledAt = randomTimeInWindow(job.win.start, job.win.end);
 
-      const postResp = await pbFetch("/v1/posts", {
-        method: "POST",
-        body: JSON.stringify({
-          caption: job.captionText,
-          media: mediaIds,
-          social_accounts: [job.acc.id],
-          scheduled_at: scheduledAt.toISOString(),
-          platform_configurations: { tiktok: { draft: false, is_aigc: false } },
-        }),
-      });
+        const postResp = await pbFetch("/v1/posts", {
+          method: "POST",
+          body: JSON.stringify({
+            caption: job.captionText,
+            media: mediaIds,
+            social_accounts: [job.acc.id],
+            scheduled_at: scheduledAt.toISOString(),
+            platform_configurations: { tiktok: { draft: false, is_aigc: false } },
+          }),
+        });
 
-      const postId = postResp.id || postResp.data?.id || "unknown";
-      const postUrl = postResp.url || postResp.data?.url || "";
+        const postId = postResp.id || postResp.data?.id || "unknown";
+        const postUrl = postResp.url || postResp.data?.url || "";
 
-      const now = new Date();
-      await appendPostLog({
-        date: now.toISOString().slice(0, 10),
-        time: now.toISOString().slice(11, 16),
-        accountId: job.acc.id,
-        accountName: job.acc.username,
-        bookName: job.bookName,
-        slideshowId: job.slideshowId,
-        slideshowName: job.slideshowName,
-        imagePromptId: job.imagePromptId,
-        imagePromptText: job.imagePrompt.slice(0, 100),
-        captionId: job.captionId,
-        captionText: job.captionText.slice(0, 100),
-        postBridgeId: String(postId),
-        postBridgeUrl: String(postUrl),
-        source: "cron",
-        userId: job.userId,
-        timestamp: now.toISOString(),
-      }).catch(() => {});
+        const now = new Date();
+        await appendPostLog({
+          date: now.toISOString().slice(0, 10),
+          time: now.toISOString().slice(11, 16),
+          accountId: job.acc.id,
+          accountName: job.acc.username,
+          bookName: job.bookName,
+          slideshowId: job.slideshowId,
+          slideshowName: job.slideshowName,
+          imagePromptId: job.imagePromptId,
+          imagePromptText: job.imagePrompt.slice(0, 100),
+          captionId: job.captionId,
+          captionText: job.captionText.slice(0, 100),
+          postBridgeId: String(postId),
+          postBridgeUrl: String(postUrl),
+          source: "cron",
+          userId: job.userId,
+          timestamp: now.toISOString(),
+        }).catch(() => {});
 
-      return {
-        job,
-        status: `scheduled ${job.slideTexts.length} slides for ${scheduledAt.toISOString()} (${job.source}) [post:${postId}]`,
-        scheduledAt: scheduledAt.toISOString(),
-        postId: String(postId),
-      };
+        return {
+          job,
+          status: `scheduled ${job.slideTexts.length} slides for ${scheduledAt.toISOString()} (${job.source}) [post:${postId}]`,
+          scheduledAt: scheduledAt.toISOString(),
+          postId: String(postId),
+        };
+      })(), JOB_TIMEOUT_MS, `tiktok ${job.acc.username} (${job.acc.id})`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       debugLog.push(`${job.acc.username} (${job.acc.id}) ${job.win.start}: job error - ${msg}`);

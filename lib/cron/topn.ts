@@ -10,6 +10,7 @@ import { shouldProcessWindow, randomTimeInWindow } from "./window";
 import { markScheduled, unmarkScheduled } from "./scheduled-today";
 import { notify } from "@/lib/notify";
 import { notifyPostFailure } from "@/lib/post-failure";
+import { withJobTimeout, JOB_TIMEOUT_MS } from "./with-timeout";
 import type { TopNResult } from "./types";
 
 // Cap concurrent TopN publishes; each takes 30-90s and serial processing at
@@ -162,14 +163,18 @@ export async function runTopNPhase(
       let scheduledAt: Date | undefined;
       try {
         scheduledAt = randomTimeInWindow(win.start, win.end);
-        const r = await publishTopN({
-          userId: topNJob.user.id,
-          listId: topNJob.selectedList.id,
-          accountIds: [Number(topNJob.accIdStr)],
-          scheduledAt: scheduledAt.toISOString(),
-          platform: topNJob.accConfig.platform,
-          backgroundPrompts: topNJob.accConfig.backgroundPrompts,
-        });
+        const r = await withJobTimeout(
+          publishTopN({
+            userId: topNJob.user.id,
+            listId: topNJob.selectedList.id,
+            accountIds: [Number(topNJob.accIdStr)],
+            scheduledAt: scheduledAt.toISOString(),
+            platform: topNJob.accConfig.platform,
+            backgroundPrompts: topNJob.accConfig.backgroundPrompts,
+          }),
+          JOB_TIMEOUT_MS,
+          `topn user=${topNJob.user.id} acc=${topNJob.accIdStr} list=${topNJob.selectedList.id}`,
+        );
         topNResults.push({
           userId: topNJob.user.id,
           listName: topNJob.selectedList.name,
