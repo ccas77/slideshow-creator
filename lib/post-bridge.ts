@@ -317,26 +317,44 @@ export async function verifyAccountHasPostsToday(
   waitMs = 5000,
 ): Promise<boolean> {
   await new Promise((r) => setTimeout(r, waitMs));
-  try {
-    const resp = await pbFetch(
-      "/v1/posts?limit=100",
-      {},
-      { retryable: true },
-    );
-    const posts: Array<{
-      scheduled_at?: string;
-      created_at?: string;
-      social_accounts?: number[];
-    }> = resp.data || resp.posts || [];
-    const today = new Date().toISOString().slice(0, 10);
-    return posts.some((p) => {
-      if (!(p.social_accounts || []).includes(accountId)) return false;
-      const d = (p.scheduled_at || p.created_at || "").slice(0, 10);
-      return d === today;
-    });
-  } catch {
-    return false;
+  const today = new Date().toISOString().slice(0, 10);
+  // See note on verifyPostScheduled: `?social_account_id=` does NOT filter
+  // server-side; pull the recent feed and filter client-side on
+  // post.social_accounts. Paginate across ~4 pages because a busy account
+  // (multiple windows/day * many users) can have its earlier successful
+  // posts buried past position 100 by newer creates from other users'
+  // accounts, which causes spurious "no posts today" alerts even when the
+  // account is actually posting fine. See 2026-07-11 investigation on the
+  // Generator side (noelledarkromance) for the incident class.
+  for (const offset of [0, 100, 200, 300]) {
+    try {
+      const resp = await pbFetch(
+        `/v1/posts?limit=100&offset=${offset}`,
+        {},
+        { retryable: true },
+      );
+      const posts: Array<{
+        scheduled_at?: string;
+        created_at?: string;
+        social_accounts?: number[];
+      }> = resp.data || resp.posts || [];
+      if (posts.length === 0) return false;
+      const hit = posts.some((p) => {
+        if (!(p.social_accounts || []).includes(accountId)) return false;
+        const d = (p.scheduled_at || p.created_at || "").slice(0, 10);
+        return d === today;
+      });
+      if (hit) return true;
+      const oldestOnPage = posts
+        .map((p) => (p.scheduled_at || p.created_at || "").slice(0, 10))
+        .filter(Boolean)
+        .sort()[0];
+      if (oldestOnPage && oldestOnPage < today) return false;
+    } catch {
+      return false;
+    }
   }
+  return false;
 }
 
 export function isPostsCreateError(err: unknown): boolean {
