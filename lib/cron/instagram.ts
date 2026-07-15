@@ -14,6 +14,7 @@ import { markScheduled } from "./scheduled-today";
 import { notify } from "@/lib/notify";
 import { notifyPostFailure } from "@/lib/post-failure";
 import { withJobTimeout, JOB_TIMEOUT_MS } from "./with-timeout";
+import { fetchAccountNameMap, resolveAccountName } from "./account-names";
 import type { IgResult } from "./types";
 
 function pickRandom<T>(arr: T[]): T | null {
@@ -27,7 +28,10 @@ export async function runInstagramPhase(
 ): Promise<{ igAutoResults: IgResult[] }> {
   const forceHour = opts?.forceHour;
   const igAutoResults: IgResult[] = [];
-  const users = await listUsers();
+  const [users, accountNames] = await Promise.all([
+    listUsers(),
+    fetchAccountNameMap(),
+  ]);
 
   // Pre-collect all IG schedule keys across all users and mark upfront
   const igSchedKeysToMark: string[] = [];
@@ -154,7 +158,7 @@ export async function runInstagramPhase(
                 date: igNow.toISOString().slice(0, 10),
                 time: igNow.toISOString().slice(11, 16),
                 accountId: accId,
-                accountName: accIdStr,
+                accountName: resolveAccountName(accountNames, accIdStr),
                 bookName: "",
                 slideshowId: ss.id,
                 slideshowName: ss.name,
