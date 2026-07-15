@@ -11,6 +11,7 @@ import { markScheduled, unmarkScheduled } from "./scheduled-today";
 import { notify } from "@/lib/notify";
 import { notifyPostFailure } from "@/lib/post-failure";
 import { withJobTimeout, JOB_TIMEOUT_MS } from "./with-timeout";
+import { fetchAccountNameMap, resolveAccountName } from "./account-names";
 import type { TopNResult } from "./types";
 
 // Cap concurrent TopN publishes; each takes 30-90s and serial processing at
@@ -24,7 +25,10 @@ export async function runTopNPhase(
 ): Promise<{ topNResults: TopNResult[] }> {
   const forceHour = opts?.forceHour;
   const topNResults: TopNResult[] = [];
-  const users = await listUsers();
+  const [users, accountNames] = await Promise.all([
+    listUsers(),
+    fetchAccountNameMap(),
+  ]);
 
   // Pre-collect TopN jobs across all users, mark schedule keys upfront
   interface TopNJob {
@@ -186,7 +190,7 @@ export async function runTopNPhase(
           date: now.toISOString().slice(0, 10),
           time: now.toISOString().slice(11, 16),
           accountId: Number(topNJob.accIdStr),
-          accountName: topNJob.accIdStr,
+          accountName: resolveAccountName(accountNames, topNJob.accIdStr),
           bookName: "",
           slideshowId: "",
           slideshowName: topNJob.selectedList.name,
